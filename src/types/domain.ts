@@ -20,7 +20,7 @@ export type CampaignStatus = 'Draft' | 'Needs approval' | 'Approved' | 'Schedule
 
 export type ApprovalState = 'Not requested' | 'Pending' | 'Approved' | 'Changes requested'
 
-export type UserRole = 'Hotel manager' | 'Department manager' | 'Admin'
+export type UserRole = 'Hotel manager' | 'Department manager'
 
 export type Metric = {
   label: string
@@ -113,6 +113,8 @@ export type Offer = {
   startDate: string
   endDate: string
   status: 'Active' | 'Draft' | 'Archived'
+  terms?: string
+  channels?: CampaignChannel[]
 }
 
 export type KeyDate = {
@@ -174,6 +176,7 @@ export type CampaignRecord = {
   audience: string[]
   offerId: string | null
   offer: string
+  offerTerms?: string
   goal: string
   startDate: string
   endDate: string
@@ -186,6 +189,24 @@ export type CampaignRecord = {
   socialPosts: SocialPost[]
   scheduledFor: string | null
   timeline: Partial<Record<CampaignTimelineStep, string>>
+}
+
+export type AssetKind = 'Brand' | 'Image' | 'Template' | 'Brochure' | 'Report' | 'Menu'
+
+export type MediaAsset = {
+  id: string
+  name: string
+  kind: AssetKind
+  departmentKey: DepartmentKey | null
+  status: 'Approved' | 'Pending approval'
+  locked: boolean
+  addedAt: string
+}
+
+export type HotelRule = {
+  id: string
+  text: string
+  createdAt: string
 }
 
 export type Learning = {

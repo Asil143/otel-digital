@@ -48,28 +48,41 @@ export type NextRecommendation = {
   nextRecommendation: string
 }
 
-export async function generateNextRecommendation(department: Department): Promise<NextRecommendation> {
+export type ResultsSummary = {
+  campaignName: string
+  status: string
+  unit: string
+  bookings: number
+  revenue: number
+  openRate: number | null
+  bestChannel: string | null
+  audience: string[]
+}
+
+export async function generateNextRecommendation(
+  department: Department,
+  summary: ResultsSummary,
+): Promise<NextRecommendation & { live: boolean }> {
   const fallback: NextRecommendation = {
-    whatWorked: `${department.resultMetric} came mostly from email and local audience engagement.`,
-    nextRecommendation: 'Repeat the best-performing audience with a new creative angle next period.',
+    whatWorked: summary.bestChannel
+      ? `${summary.campaignName} has ${Math.round(summary.bookings)} ${summary.unit} so far, led by ${summary.bestChannel.toLowerCase()}.`
+      : `${summary.campaignName} has ${Math.round(summary.bookings)} ${summary.unit} so far.`,
+    nextRecommendation: summary.audience.length
+      ? `Follow up ${summary.audience[0].toLowerCase()} who clicked but didn't book, then repeat the offer with a new creative angle next period.`
+      : 'Choose a consented audience and repeat the best-performing channel next period.',
   }
 
   try {
     const response = await fetch(`${API_BASE_URL}/api/ai/next-recommendation`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        department: department.name,
-        offer: department.offer,
-        resultMetric: department.resultMetric,
-        confidence: department.recommendation.confidence,
-      }),
+      body: JSON.stringify({ department: department.name, offer: department.offer, ...summary }),
     })
     if (!response.ok) throw new Error(`AI server responded ${response.status}`)
-    return (await response.json()) as NextRecommendation
+    return { ...((await response.json()) as NextRecommendation), live: true }
   } catch (error) {
-    console.warn('Falling back to seeded next-recommendation:', error)
-    return fallback
+    console.warn('Falling back to local next-recommendation:', error)
+    return { ...fallback, live: false }
   }
 }
 
@@ -78,6 +91,7 @@ export type RecommendationContext = {
   latestUpdate: string | null
   activeOffers: string[]
   upcomingDates: string[]
+  hotelRules: string[]
 }
 
 const outcomes: Recommendation['outcome'][] = ['Campaign', 'Corporate action', 'OTA/distribution review', 'Monitor only', 'Revenue review']

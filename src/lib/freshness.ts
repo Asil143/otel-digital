@@ -30,7 +30,14 @@ export function resolveFreshness(department: Department, signals: SignalRecord[]
     return { state: department.signalState, ageDays: department.signalAgeDays, latestSignal: null }
   }
   const ageDays = daysSince(latest.createdAt)
-  const state: SourceState = latest.state === 'Detected' ? 'Detected' : ageDays > STALE_AFTER_DAYS ? 'Stale' : 'Confirmed'
+  const state: SourceState =
+    latest.state === 'Detected'
+      ? 'Detected'
+      : ageDays > STALE_AFTER_DAYS
+        ? 'Stale'
+        : latest.sourceType === 'adaptive_check_in'
+          ? 'Approximate'
+          : 'Confirmed'
   return { state, ageDays, latestSignal: latest }
 }
 

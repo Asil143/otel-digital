@@ -1,40 +1,35 @@
 import {
-  ArrowUpRight,
-  BedDouble,
   Check,
-  DatabaseZap,
   Download,
   FileText,
   FileUp,
-  Globe2,
-  Image,
-  Layers3,
   Lock,
   Mail,
-  MessageSquareText,
-  PenLine,
   ScanSearch,
   ShieldCheck,
-  Sparkles,
-  Tag,
   Upload,
-  Users,
 } from 'lucide-react'
 import { useState, type ChangeEvent } from 'react'
 import { segments as audienceSegments, seedContacts } from '../data/contacts'
+import { seedAssets } from '../data/brain'
 import { activeHotel } from '../config/hotel'
 import type { AppRoute } from '../config/routes'
 import { departments } from '../data/departments'
 import { productionGuardrails } from '../data/workflows'
-import { usePersistentState } from '../lib/usePersistentState'
+import { usePersistentState, writeStored } from '../lib/usePersistentState'
+import { logActivity, recordActivity } from '../lib/activityLog'
+import { useCurrentUser } from '../lib/currentUser'
+import { useSignals } from '../lib/signalStore'
+import { formatCount, formatMoney, mergeDaily, resultUnit, sumTotals } from '../lib/results'
+import { useResults } from '../lib/useResults'
+import { ResultsChart } from '../components/operations/ResultsChart'
 import { extractBusinessData } from '../services/mockApi'
-import type { CampaignRecord, Contact, DepartmentKey, HotelAccount, Learning, Offer, UserRole } from '../types/domain'
-import { seedOffers } from '../data/offers'
-import { Modal } from '../components/ui/Modal'
+import type { CampaignRecord, CampaignStage, Contact, DepartmentKey, HotelAccount, Learning, MediaAsset, SignalRecord } from '../types/domain'
 import { ExecutionLayer } from '../components/operations/ExecutionLayer'
 import { CalendarWorkspace } from './workspaces/CalendarWorkspace'
 import { CampaignsWorkspace } from './workspaces/CampaignsWorkspace'
 import { OffersWorkspace } from './workspaces/OffersWorkspace'
+import { BrainWorkspace } from './workspaces/BrainWorkspace'
 
 type WorkspaceRoute = Exclude<AppRoute, 'demo' | 'departments'>
 
@@ -42,7 +37,7 @@ const routeMeta: Record<WorkspaceRoute, { title: string; eyebrow: string; summar
   brain: {
     title: 'Hotel Brain',
     eyebrow: activeHotel.name,
-    summary: 'Editable hotel facts, the approved brand asset library, master audiences, and hotel-wide rules every department draws from.',
+    summary: 'Everything the AI knows about your hotel: property facts, the rules it must follow, approved assets, audiences, and what it has learned.',
   },
   offers: {
     title: 'Offers',
@@ -82,18 +77,13 @@ const routeMeta: Record<WorkspaceRoute, { title: string; eyebrow: string; summar
 }
 
 export function WorkspacePage({ route, onNavigate }: { route: WorkspaceRoute; onNavigate: (route: AppRoute) => void }) {
-  const [selected, setSelected] = useState(0)
   const [hotel] = usePersistentState<HotelAccount>('otel:hotel-account', activeHotel)
   const meta = routeMeta[route]
   const eyebrow = route === 'brain' ? hotel.name : meta.eyebrow
 
-  function openCampaign(campaign: CampaignRecord) {
-    try {
-      window.localStorage.setItem('otel:active-department', JSON.stringify(campaign.departmentKey))
-      window.localStorage.setItem('otel:active-campaign-stage', JSON.stringify('Strategy'))
-    } catch {
-      // Navigation still works; the dashboard just opens on its last department.
-    }
+  function openCampaign(campaign: CampaignRecord, stage: CampaignStage = 'Strategy') {
+    writeStored('otel:active-department', campaign.departmentKey)
+    writeStored('otel:active-campaign-stage', stage)
     onNavigate('departments')
   }
 
@@ -105,279 +95,24 @@ export function WorkspacePage({ route, onNavigate }: { route: WorkspaceRoute; on
         <p className="page-summary">{meta.summary}</p>
       </header>
 
-      {route === 'brain' && <BrainWorkspace selected={selected} setSelected={setSelected} />}
-      {route === 'offers' && <OffersWorkspace />}
+      {route === 'brain' && <BrainWorkspace onNavigate={onNavigate} />}
+      {route === 'offers' && (
+        <OffersWorkspace
+          onOpenCampaign={openCampaign}
+          onCreateCampaign={(offer) => {
+            writeStored('otel:active-department', offer.departmentKey)
+            writeStored('otel:pending-create', offer.id)
+            onNavigate('departments')
+          }}
+        />
+      )}
       {route === 'campaigns' && <CampaignsWorkspace onOpenCampaign={openCampaign} />}
       {route === 'audience' && <AudienceWorkspace />}
       {route === 'calendar' && <CalendarWorkspace />}
       {route === 'files' && <FilesWorkspace />}
-      {route === 'results' && <ResultsWorkspace />}
+      {route === 'results' && <ResultsWorkspace onOpenCampaign={openCampaign} />}
       {route === 'governance' && <GovernanceWorkspace />}
     </main>
-  )
-}
-
-const hotelHeroImage = 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=1800&q=80'
-
-const brandAssets = [
-  { name: 'Logo pack (SVG, PNG)', locked: true },
-  { name: 'Brand image library', locked: true },
-  { name: 'Email template pack', locked: true },
-  { name: 'Signature hero template', locked: true },
-  { name: 'Wedding brochure', locked: false },
-]
-
-const masterAudiences = [
-  { name: 'Past guests (all stays)', contacts: 24800 },
-  { name: 'Local audience within 15 miles', contacts: 18500 },
-  { name: 'Loyalty members', contacts: 6200 },
-  { name: 'Suppression list (always excluded)', contacts: 940 },
-]
-
-function readDepartmentLockedTemplates(): Record<string, string[]> {
-  const result: Record<string, string[]> = {}
-  for (const department of departments) {
-    try {
-      const raw = window.localStorage.getItem(`otel:${department.key}:locked-templates`)
-      result[department.key] = raw ? (JSON.parse(raw) as string[]) : ['signature']
-    } catch {
-      result[department.key] = ['signature']
-    }
-  }
-  return result
-}
-
-function readAggregatedFeedback(): Record<string, number> {
-  const totals: Record<string, number> = {}
-  for (const department of departments) {
-    try {
-      const raw = window.localStorage.getItem(`otel:${department.key}:design-feedback`)
-      const counts = raw ? (JSON.parse(raw) as Record<string, number>) : {}
-      for (const [reason, count] of Object.entries(counts)) {
-        totals[reason] = (totals[reason] ?? 0) + count
-      }
-    } catch {
-      // No feedback saved yet for this department.
-    }
-  }
-  return totals
-}
-
-function BrainWorkspace({ selected, setSelected }: { selected: number; setSelected: (index: number) => void }) {
-  const [hotel, setHotel] = usePersistentState<HotelAccount>('otel:hotel-account', activeHotel)
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<HotelAccount>(hotel)
-  const lockedByDepartment = readDepartmentLockedTemplates()
-  const hotelWideLocked = Object.values(lockedByDepartment).every((list) => list.includes('signature'))
-  const aggregatedFeedback = readAggregatedFeedback()
-  const learnedPreferences = Object.entries(aggregatedFeedback).filter(([, count]) => count >= 1)
-  const [campaignLearnings] = usePersistentState<Learning[]>('otel:learnings', [])
-  const [role] = usePersistentState<UserRole>('otel:current-role', 'Department manager')
-  const canEditHotel = role === 'Hotel manager'
-  const [offers] = usePersistentState<Offer[]>('otel:offers', seedOffers)
-  const [contacts] = usePersistentState<Contact[]>('otel:audience-contacts', seedContacts)
-
-  function saveFacts() {
-    setHotel(draft)
-    setEditing(false)
-  }
-
-  const stats = [
-    { icon: BedDouble, value: String(hotel.roomCount), label: 'Bedrooms' },
-    { icon: Layers3, value: String(departments.length), label: 'Business areas' },
-    { icon: Tag, value: String(offers.filter((offer) => offer.status === 'Active').length), label: 'Active offers' },
-    { icon: Users, value: String(contacts.length), label: 'Guest contacts' },
-    { icon: Globe2, value: hotel.currency, label: hotel.timezone },
-  ]
-
-  return (
-    <>
-      <section className="property-hero">
-        <div className="property-banner" style={{ backgroundImage: `url(${hotelHeroImage})` }}>
-          <span className="property-pill">Your Hotel Brain</span>
-          {canEditHotel ? (
-            <button type="button" className="property-edit" onClick={() => { setDraft(hotel); setEditing(true) }}>
-              <PenLine size={15} /> Edit hotel details
-            </button>
-          ) : (
-            <span className="property-edit locked" title="Only the hotel manager can edit hotel details">
-              <Lock size={14} /> Hotel manager edits
-            </span>
-          )}
-          <div className="property-title">
-            <h2>{hotel.name}</h2>
-            <p>{hotel.location} · Property facts every campaign draws from</p>
-          </div>
-        </div>
-        <div className="property-stats">
-          {stats.map(({ icon: Icon, value, label }) => (
-            <div key={label}>
-              <Icon size={20} />
-              <strong>{value}</strong>
-              <span>{label}</span>
-            </div>
-          ))}
-        </div>
-        <div className="property-brand">
-          <div>
-            <span>Brand promise</span>
-            <blockquote>“{hotel.brandPromise}”</blockquote>
-          </div>
-          <div>
-            <span>Voice & tone</span>
-            <p>{hotel.brandTone}</p>
-            <em>Every campaign, email and post is written in this voice.</em>
-          </div>
-        </div>
-      </section>
-
-      <div className="power-grid three">
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Approved assets</p>
-            <h2>Brand asset library</h2>
-          </div>
-          <Image size={20} />
-        </div>
-        <div className="brand-row-list">
-          {brandAssets.map((asset) => (
-            <div className="brand-asset-row" key={asset.name}>
-              {asset.locked ? <Lock size={14} /> : <FileText size={14} />}
-              <span>{asset.name}</span>
-              <em>{asset.locked ? 'Hotel-locked' : 'Editable'}</em>
-            </div>
-          ))}
-        </div>
-        <p className="muted small">Full library, uploads, and extraction live in Files & Media.</p>
-      </section>
-
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Audiences</p>
-            <h2>Master audience list</h2>
-          </div>
-          <Users size={20} />
-        </div>
-        <div className="brand-row-list">
-          {masterAudiences.map((segment) => (
-            <div className="brand-asset-row" key={segment.name}>
-              <Users size={14} />
-              <span>{segment.name}</span>
-              <em>{segment.contacts.toLocaleString()}</em>
-            </div>
-          ))}
-        </div>
-        <p className="muted small">Every department campaign draws from this shared, consent-checked list.</p>
-      </section>
-
-      <section className="panel span-2">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Hotel-wide rules</p>
-            <h2>Guardrails and learning</h2>
-          </div>
-          <ShieldCheck size={20} />
-        </div>
-        <div className="check-stack">
-          {productionGuardrails.map((rule) => (
-            <span key={rule}><Check size={15} /> {rule}</span>
-          ))}
-        </div>
-        <div className="brand-asset-row">
-          <Lock size={14} />
-          <span>Signature hero template</span>
-          <em>{hotelWideLocked ? 'Locked in every business area' : 'Unlocked in at least one area'}</em>
-        </div>
-        {learnedPreferences.length > 0 ? (
-          <div className="learned-preferences">
-            <p className="eyebrow">Learned across departments</p>
-            {learnedPreferences.map(([reason, count]) => (
-              <span key={reason} className="learning-banner compact">
-                <Sparkles size={14} /> Avoid "{reason}" ({count}x flagged)
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="muted small">No cross-department design feedback saved yet.</p>
-        )}
-        <div className="learned-preferences">
-          <p className="eyebrow">Learned from campaign results</p>
-          {campaignLearnings.length === 0 && (
-            <p className="muted small">Save insights from a campaign's Results stage and they appear here for future recommendations.</p>
-          )}
-          {campaignLearnings.slice(0, 6).map((learning) => (
-            <div className="brand-asset-row" key={learning.id}>
-              <span className={`insight-kind ${learning.kind.toLowerCase()}`}>{learning.kind}</span>
-              <span>{learning.text}</span>
-              <em>{departments.find((department) => department.key === learning.departmentKey)?.name}</em>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      </div>
-
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">Business areas</p>
-            <h2>Hotel departments</h2>
-          </div>
-        </div>
-        <p className="muted small department-grid-intro">Review each department's status, data gaps and recommended action.</p>
-        <div className="department-status-grid four">
-          {departments.map((department, index) => (
-            <article
-              className={`department-status-card${selected === index ? ' selected' : ''}`}
-              key={department.key}
-              onClick={() => setSelected(index)}
-            >
-              <div className="department-status-image" style={{ backgroundImage: `url(${department.image})` }}>
-                <span className="department-status-badge">
-                  <DatabaseZap size={14} />
-                </span>
-              </div>
-              <div className="department-status-body">
-                <h3>{department.name}</h3>
-                <p className="department-status-headline">{department.subline}</p>
-                <p>
-                  <strong>Why:</strong> {department.recommendation.summary}
-                </p>
-                <p>
-                  <strong>Action:</strong> {department.recommendation.title}.
-                </p>
-                <div className="department-status-divider"></div>
-                <p className="department-status-source">Source: {department.signal}</p>
-                <div className="department-status-footer">
-                  <span>{department.metrics[0].value} {department.metrics[0].label.toLowerCase()}</span>
-                  <span className="department-status-arrow"><ArrowUpRight size={15} /></span>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      {editing && (
-        <Modal title="Edit hotel details" onClose={() => setEditing(false)} wide>
-          <div className="hotel-facts-form">
-            <label className="span-two"><span>Hotel name</span><input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></label>
-            <label><span>Location</span><input value={draft.location} onChange={(e) => setDraft({ ...draft, location: e.target.value })} /></label>
-            <label><span>Bedrooms</span><input type="number" min={1} value={draft.roomCount} onChange={(e) => setDraft({ ...draft, roomCount: Number(e.target.value) })} /></label>
-            <label><span>Currency</span><input value={draft.currency} onChange={(e) => setDraft({ ...draft, currency: e.target.value })} /></label>
-            <label><span>Timezone</span><input value={draft.timezone} onChange={(e) => setDraft({ ...draft, timezone: e.target.value })} /></label>
-            <label className="span-full"><span>Brand promise</span><input value={draft.brandPromise} onChange={(e) => setDraft({ ...draft, brandPromise: e.target.value })} /></label>
-            <label className="span-full"><span>Voice & tone</span><input value={draft.brandTone} onChange={(e) => setDraft({ ...draft, brandTone: e.target.value })} /></label>
-            <div className="hotel-facts-actions">
-              <button type="button" className="secondary-button" onClick={() => setEditing(false)}>Cancel</button>
-              <button type="button" className="primary-button" onClick={saveFacts}>Save hotel details</button>
-            </div>
-          </div>
-        </Modal>
-      )}
-    </>
   )
 }
 
@@ -406,6 +141,7 @@ function parseContactsCsv(text: string): Contact[] {
 }
 
 function AudienceWorkspace() {
+  const { isHotelManager: canManageContacts } = useCurrentUser()
   const [contacts, setContacts] = usePersistentState<Contact[]>('otel:audience-contacts', seedContacts)
   const [segmentFilter, setSegmentFilter] = useState('All contacts')
   const [permissionFilter, setPermissionFilter] = useState<'All permissions' | 'Subscribed' | 'Unsubscribed' | 'Unknown'>('All permissions')
@@ -434,6 +170,7 @@ function AudienceWorkspace() {
       }
       setContacts((current) => [...imported, ...current])
       setImportNotice(`Imported ${imported.length} contact${imported.length === 1 ? '' : 's'} from ${file.name}. Permission set to Unknown until confirmed.`)
+      logActivity('Contacts imported', `${imported.length} contact${imported.length === 1 ? '' : 's'} from ${file.name}, awaiting consent confirmation.`, 'info', 'Audience')
     }
     reader.readAsText(file)
     event.target.value = ''
@@ -450,6 +187,7 @@ function AudienceWorkspace() {
     link.download = 'otel-audience-export.csv'
     link.click()
     URL.revokeObjectURL(url)
+    logActivity('Audience exported', `${contacts.length} contacts downloaded as CSV.`, 'info', 'Audience')
   }
 
   return (
@@ -460,15 +198,19 @@ function AudienceWorkspace() {
             <p className="eyebrow">Contacts, segments & consent</p>
             <h2>Audience</h2>
           </div>
-          <div className="hero-actions">
-            <label className="file-picker-label">
-              <input type="file" accept=".csv" onChange={handleImport} hidden />
-              <span className="secondary-button"><Upload size={15} /> Import contacts</span>
-            </label>
-            <button type="button" className="secondary-button" onClick={handleExport}>
-              <Download size={15} /> Export
-            </button>
-          </div>
+          {canManageContacts ? (
+            <div className="hero-actions">
+              <label className="file-picker-label">
+                <input type="file" accept=".csv" onChange={handleImport} hidden />
+                <span className="secondary-button"><Upload size={15} /> Import contacts</span>
+              </label>
+              <button type="button" className="secondary-button" onClick={handleExport}>
+                <Download size={15} /> Export
+              </button>
+            </div>
+          ) : (
+            <span className="scope-chip"><Lock size={13} /> Imports and exports: hotel manager</span>
+          )}
         </div>
 
         {importNotice && (
@@ -561,15 +303,6 @@ function AudienceWorkspace() {
     </div>
   )
 }
-
-const defaultLibraryFiles = [
-  { name: 'Spa diary screenshot', done: true },
-  { name: 'Rooms pickup report', done: true },
-  { name: 'Restaurant menu PDF', done: true },
-  { name: 'Brand image library', done: false },
-  { name: 'Email template pack', done: false },
-  { name: 'Wedding brochure', done: false },
-]
 
 const extractionSamples: Record<DepartmentKey, { file: string; type: string; fields: Record<string, string>; confidence: string }> = {
   rooms: {
@@ -671,14 +404,42 @@ const extractionSamples: Record<DepartmentKey, { file: string; type: string; fie
 }
 
 function FilesWorkspace() {
-  const [activeArea, setActiveArea] = useState<DepartmentKey>('spa')
+  const { canAccess, allowedAreas } = useCurrentUser()
+  const [chosenArea, setActiveArea] = useState<DepartmentKey>('spa')
+  const activeArea = canAccess(chosenArea) ? chosenArea : allowedAreas[0]
   const [status, setStatus] = useState<'idle' | 'extracting' | 'review' | 'confirmed'>('idle')
-  const [selectedFile, setSelectedFile] = useState('Spa diary screenshot')
   const [extractedFields, setExtractedFields] = useState<Record<string, string> | null>(null)
   const [confidence, setConfidence] = useState(sampleConfidence(activeArea))
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; type: string } | null>(null)
-  const [libraryFiles, setLibraryFiles] = useState(defaultLibraryFiles)
+  const [assets, setAssets] = usePersistentState<MediaAsset[]>('otel:assets', seedAssets)
+  const libraryFiles = assets.filter((asset) => asset.departmentKey === null || canAccess(asset.departmentKey))
+  const [, setSignals] = useSignals()
   const sample = extractionSamples[activeArea]
+  const areaName = departments.find((department) => department.key === activeArea)?.name ?? activeArea
+
+  function confirmExtraction() {
+    const fields = extractedFields ?? sample.fields
+    const fileName = uploadedFile?.name ?? sample.file
+    setSignals((current) => [
+      {
+        id: crypto.randomUUID(),
+        departmentKey: activeArea,
+        sourceType: 'file_upload',
+        summary: `${fileName} extracted and confirmed in Files & Media`,
+        fields,
+        confidence: confidence as SignalRecord['confidence'],
+        state: 'Confirmed',
+        createdAt: new Date().toISOString(),
+      },
+      ...current,
+    ])
+    setAssets((current) => [
+      { id: crypto.randomUUID(), name: fileName, kind: 'Report', departmentKey: activeArea, status: 'Approved', locked: false, addedAt: new Date().toISOString() },
+      ...current.filter((asset) => !(asset.name === fileName && asset.departmentKey === activeArea)),
+    ])
+    setStatus('confirmed')
+    logActivity('Report confirmed', `${fileName}: ${Object.keys(fields).length} figures are now trusted data for ${areaName}.`, 'success', areaName)
+  }
 
   function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -694,12 +455,6 @@ function FilesWorkspace() {
     setExtractedFields(result.fields)
     setConfidence(result.confidence)
     setStatus('review')
-    if (uploadedFile) {
-      setLibraryFiles((current) => [
-        { name: uploadedFile.name, done: true },
-        ...current.filter((entry) => entry.name !== uploadedFile.name),
-      ])
-    }
   }
 
   return (
@@ -714,7 +469,7 @@ function FilesWorkspace() {
         </div>
 
         <div className="department-tabs">
-          {departments.map((department) => (
+          {departments.filter((department) => canAccess(department.key)).map((department) => (
             <button
               type="button"
               className={department.key === activeArea ? 'selected' : ''}
@@ -761,11 +516,14 @@ function FilesWorkspace() {
               {Object.entries(extractedFields ?? sample.fields).map(([label, value]) => (
                 <label key={label}>
                   <span>{label}</span>
-                  <input defaultValue={value} />
+                  <input
+                    value={value}
+                    onChange={(event) => setExtractedFields({ ...(extractedFields ?? sample.fields), [label]: event.target.value })}
+                  />
                 </label>
               ))}
             </div>
-            <button type="button" className="primary-button" onClick={() => setStatus('confirmed')}>
+            <button type="button" className="primary-button" onClick={confirmExtraction} disabled={status === 'confirmed'}>
               Confirm trusted data
             </button>
           </div>
@@ -781,22 +539,19 @@ function FilesWorkspace() {
 
       <section className="panel">
         <p className="eyebrow">Files & Media</p>
-        <h2>Library status</h2>
-        <div className="timeline-list">
-          {libraryFiles.map(({ name, done }) => (
-            <button
-              type="button"
-              className={`${done ? 'done' : ''} ${selectedFile === name ? 'selected-row' : ''}`}
-              key={name}
-              onClick={() => setSelectedFile(name)}
-            >
-              <FileText size={15} /> {name}
-            </button>
+        <h2>Library</h2>
+        <p className="muted small">Shared with Hotel Brain. Confirmed reports are added here automatically.</p>
+        <div className="brand-row-list">
+          {libraryFiles.map((asset) => (
+            <div className="brand-asset-row asset-row" key={asset.id}>
+              <FileText size={14} />
+              <span>
+                {asset.name}
+                <small>{asset.kind} · {asset.departmentKey ? departments.find((department) => department.key === asset.departmentKey)?.name : 'Hotel-wide'}</small>
+              </span>
+              <em className={asset.status === 'Approved' ? '' : 'pending-chip'}>{asset.status === 'Approved' ? 'Approved' : 'Awaiting approval'}</em>
+            </div>
           ))}
-        </div>
-        <div className="selected-file">
-          <strong>Selected</strong>
-          <span>{selectedFile}</span>
         </div>
       </section>
     </div>
@@ -807,64 +562,140 @@ function sampleConfidence(department: DepartmentKey) {
   return extractionSamples[department].confidence
 }
 
-function ResultsWorkspace() {
-  const [selectedDepartment, setSelectedDepartment] = useState(departments[0].key)
-  const [learnings] = usePersistentState<Learning[]>('otel:learnings', [])
-  const selectedIndex = Math.max(0, departments.findIndex((department) => department.key === selectedDepartment))
-  const selected = departments[selectedIndex]
-  const scale = 1 + selectedIndex * 0.07
-  const isCampaignArea = selected.recommendation.outcome === 'Campaign'
-  const channels = [
-    { label: 'Email', icon: Mail, value: Math.round(1240 * scale), unit: 'opens' },
-    { label: 'Website', icon: Globe2, value: Math.round(1856 * scale), unit: 'visits' },
-    { label: 'Social', icon: MessageSquareText, value: Math.round(9800 * scale), unit: 'reach' },
-  ]
+function ResultsWorkspace({ onOpenCampaign }: { onOpenCampaign: (campaign: CampaignRecord, stage: CampaignStage) => void }) {
+  const { results: allResults } = useResults()
+  const { canAccess, isHotelManager, allowedAreas } = useCurrentUser()
+  const results = allResults.filter((result) => canAccess(result.campaign.departmentKey))
+  const visibleDepartments = departments.filter((department) => canAccess(department.key))
+  const [allLearnings] = usePersistentState<Learning[]>('otel:learnings', [])
+  const learnings = allLearnings.filter((learning) => canAccess(learning.departmentKey))
+  const [selectedDepartment, setSelectedDepartment] = useState<DepartmentKey>(() => {
+    const firstMeasured = results.find((result) => result.state !== 'projection')
+    return firstMeasured?.campaign.departmentKey ?? allowedAreas[0]
+  })
+
+  const measured = results.filter((result) => result.state !== 'projection')
+  const hotelTotals = sumTotals(measured.map((result) => result.shown))
+  const selected = visibleDepartments.find((department) => department.key === selectedDepartment) ?? visibleDepartments[0]
+  const selectedResults = results.filter((result) => result.campaign.departmentKey === selected.key)
+  const selectedMeasured = selectedResults.filter((result) => result.state !== 'projection')
+  const unit = resultUnit(selected)
+  const channelTotals = (['Email', 'Social', 'Website'] as const)
+    .map((channel) => {
+      const items = selectedMeasured.flatMap((result) => result.channels).filter((item) => item.channel === channel)
+      return {
+        channel,
+        reach: items.reduce((sum, item) => sum + item.reach, 0),
+        label: items[0]?.reachLabel ?? '',
+        bookings: items.reduce((sum, item) => sum + item.bookings, 0),
+      }
+    })
+    .filter((item) => item.reach > 0)
+  const selectedTotal = sumTotals(selectedMeasured.map((result) => result.shown))
 
   return (
-    <div className="power-grid">
-      <section className="panel span-2">
-        <div className="results-matrix">
-          {departments.map((department) => {
-            const saved = learnings.filter((learning) => learning.departmentKey === department.key).length
-            return (
-              <button
-                type="button"
-                className={selectedDepartment === department.key ? 'selected' : ''}
-                key={department.key}
-                onClick={() => setSelectedDepartment(department.key)}
-              >
-                <img src={department.image} alt="" />
-                <strong>{department.name}</strong>
-                <span>{department.resultMetric}</span>
-                <em className={saved ? '' : 'muted-em'}>{saved ? `${saved} learning${saved === 1 ? '' : 's'} saved` : 'No learnings saved yet'}</em>
-              </button>
-            )
-          })}
+    <>
+      <section className="results-overview">
+        <div>
+          <span>Attributed revenue</span>
+          <strong>{formatMoney(hotelTotals.revenue)}</strong>
+          <em>{isHotelManager ? 'across all live and completed campaigns' : `${selected.name} campaigns`}</em>
+        </div>
+        <div>
+          <span>Campaigns live</span>
+          <strong>{results.filter((result) => result.state === 'live').length}</strong>
+          <em>{results.filter((result) => result.state === 'completed').length} completed</em>
+        </div>
+        <div>
+          <span>Emails opened</span>
+          <strong>{formatCount(hotelTotals.opens)}</strong>
+          <em>{formatCount(hotelTotals.sends)} sent</em>
+        </div>
+        <div>
+          <span>Learnings saved</span>
+          <strong>{learnings.length}</strong>
+          <em>feeding future recommendations</em>
         </div>
       </section>
-      <section className="panel">
-        <p className="eyebrow">Channel impact</p>
-        <h2>{selected.name}</h2>
-        {isCampaignArea ? (
-          channels.map(({ label, icon: Icon, value, unit }) => (
-            <div className="channel-row" key={label}>
-              <Icon size={18} />
-              <div>
-                <strong>{label}</strong>
-                <span>{value.toLocaleString()} {unit}</span>
-              </div>
-            </div>
-          ))
-        ) : (
-          <p className="muted">No campaign has run here yet — the AI recommended "{selected.recommendation.outcome}" instead.</p>
-        )}
-        <p className="muted small">Demo figures. Live attribution needs a connected booking and analytics source.</p>
-      </section>
-    </div>
+
+      <div className="power-grid">
+        <section className="panel span-2">
+          <div className="results-matrix">
+            {visibleDepartments.map((department) => {
+              const areaResults = results.filter((result) => result.campaign.departmentKey === department.key)
+              const areaMeasured = areaResults.filter((result) => result.state !== 'projection')
+              const areaTotals = sumTotals(areaMeasured.map((result) => result.shown))
+              const pending = areaResults.find((result) => result.state === 'projection')
+              const saved = learnings.filter((learning) => learning.departmentKey === department.key).length
+              const areaUnit = resultUnit(department)
+              return (
+                <button
+                  type="button"
+                  className={selectedDepartment === department.key ? 'selected' : ''}
+                  key={department.key}
+                  onClick={() => setSelectedDepartment(department.key)}
+                >
+                  <img src={department.image} alt="" />
+                  <strong>{department.name}</strong>
+                  <span>
+                    {areaMeasured.length
+                      ? `${formatCount(areaTotals.bookings)} ${areaUnit} · ${formatMoney(areaTotals.revenue)}`
+                      : pending
+                        ? `Not live · projected ${formatCount(pending.projected.bookings)} ${areaUnit}`
+                        : `No campaign · ${department.recommendation.outcome}`}
+                  </span>
+                  <em className={saved ? '' : 'muted-em'}>{saved ? `${saved} learning${saved === 1 ? '' : 's'} saved` : 'No learnings saved yet'}</em>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="panel">
+          <p className="eyebrow">Results</p>
+          <h2>{selected.name}</h2>
+          {selectedMeasured.length > 0 ? (
+            <>
+              <p className="muted small">
+                {formatCount(selectedTotal.bookings)} {unit} and {formatMoney(selectedTotal.revenue)} from {selectedMeasured.length} campaign
+                {selectedMeasured.length === 1 ? '' : 's'}.
+              </p>
+              <ResultsChart daily={mergeDaily(selectedMeasured)} unit={unit} />
+              {channelTotals.map((item) => (
+                <div className="channel-row" key={item.channel}>
+                  <strong>{item.channel}</strong>
+                  <div>
+                    <span>{formatCount(item.reach)} {item.label}</span>
+                    <span>{formatCount(item.bookings)} {unit}</span>
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            <p className="muted">
+              {selectedResults.length
+                ? 'Nothing live here yet. Open the campaign to see its projection.'
+                : `No campaign — the AI recommended "${selected.recommendation.outcome}" instead.`}
+            </p>
+          )}
+          <div className="results-campaign-list">
+            {selectedResults.map((result) => (
+              <button type="button" key={result.campaign.id} onClick={() => onOpenCampaign(result.campaign, 'Results')}>
+                <span className={`campaign-status-chip status-${result.campaign.status.toLowerCase().replace(/\s+/g, '-')}`}>{result.campaign.status}</span>
+                <strong>{result.campaign.name}</strong>
+                <em>Open results →</em>
+              </button>
+            ))}
+          </div>
+          <p className="muted small">Demo model. Live attribution needs a connected booking source.</p>
+        </section>
+      </div>
+    </>
   )
 }
 
 function GovernanceWorkspace() {
+  const { isHotelManager } = useCurrentUser()
   return (
     <div className="power-grid">
       <section className="panel span-2">
@@ -882,7 +713,7 @@ function GovernanceWorkspace() {
           ))}
         </div>
       </section>
-      <ExecutionLayer onActivity={() => undefined} />
+      <ExecutionLayer onActivity={recordActivity} readOnly={!isHotelManager} />
 
       <section className="panel span-2 about-build-panel">
         <p className="eyebrow">Otel Digital · V1</p>

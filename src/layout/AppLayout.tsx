@@ -1,6 +1,7 @@
 import { Hotel } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { type AppRoute, routes } from '../config/routes'
+import { UserSwitcher } from '../components/ui/UserSwitcher'
+import { type AppRoute, hiddenFromNav, routes } from '../config/routes'
 
 export function AppLayout({
   activeRoute,
@@ -25,7 +26,7 @@ export function AppLayout({
         </div>
 
         <nav className="nav-list" aria-label="Primary navigation">
-          {routes.map(({ id, label, path, icon: Icon }) => (
+          {routes.filter(({ id }) => !hiddenFromNav.includes(id)).map(({ id, label, path, icon: Icon }) => (
             <button
               className={id === activeRoute ? 'active' : ''}
               type="button"
@@ -41,11 +42,7 @@ export function AppLayout({
         </nav>
 
         <div className="sidebar-footer">
-          <span className="status-dot"></span>
-          <div>
-            <strong>V1 production plan</strong>
-            <span>Integration-ready, not integration-dependent</span>
-          </div>
+          <UserSwitcher />
         </div>
       </aside>
 

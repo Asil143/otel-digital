@@ -2,29 +2,16 @@ import { Eye, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { seedContacts } from '../../../data/contacts'
 import { usePersistentState } from '../../../lib/usePersistentState'
+import { consentRate as rateOf, eligibleAudience, segmentSize } from '../../../lib/results'
 import type { Contact } from '../../../types/domain'
 import type { StageProps } from './shared'
-
-const knownSegmentSizes: Record<string, number> = {
-  'Past leisure guests': 8240,
-  'Lapsed guests': 5120,
-  'Local audience within 50 miles': 18400,
-  'Family travellers': 6220,
-}
-
-function segmentSize(segment: string, index: number): number {
-  return knownSegmentSizes[segment] ?? (index + 2) * 1840
-}
 
 export function AudienceStage({ campaign, department, onChange, onActivity }: StageProps) {
   const [contacts] = usePersistentState<Contact[]>('otel:audience-contacts', seedContacts)
   const [showPreview, setShowPreview] = useState(false)
 
-  const consentRate = contacts.length > 0 ? contacts.filter((contact) => contact.permission === 'Subscribed').length / contacts.length : 0
-  const selectedTotal = department.audience
-    .map((segment, index) => (campaign.audience.includes(segment) ? segmentSize(segment, index) : 0))
-    .reduce((sum, size) => sum + size, 0)
-  const eligible = Math.round(selectedTotal * consentRate)
+  const consentRate = rateOf(contacts)
+  const eligible = eligibleAudience(campaign, contacts)
   const previewContacts = contacts.filter((contact) => contact.permission === 'Subscribed').slice(0, 5)
 
   function toggleSegment(segment: string) {
@@ -48,12 +35,12 @@ export function AudienceStage({ campaign, department, onChange, onActivity }: St
       </div>
 
       <div className="audience-grid">
-        {department.audience.map((segment, index) => (
+        {department.audience.map((segment) => (
           <label key={segment} className={campaign.audience.includes(segment) ? 'selected' : ''}>
             <input type="checkbox" checked={campaign.audience.includes(segment)} onChange={() => toggleSegment(segment)} />
             <span>
               <strong>{segment}</strong>
-              {segmentSize(segment, index).toLocaleString()} contacts (est.)
+              {segmentSize(segment).toLocaleString()} contacts (est.)
             </span>
           </label>
         ))}

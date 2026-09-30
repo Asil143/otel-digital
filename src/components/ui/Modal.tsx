@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 export function Modal({
   children,
@@ -33,7 +34,7 @@ export function Modal({
     }
   }, [])
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" role="presentation" onMouseDown={() => onCloseRef.current()}>
       <section
         ref={panelRef}
@@ -50,6 +51,7 @@ export function Modal({
         </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }

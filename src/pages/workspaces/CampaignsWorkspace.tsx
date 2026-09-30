@@ -1,23 +1,21 @@
 import { ArrowRight, Check, Globe2, Mail, MessageSquareText } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { departments } from '../../data/departments'
-import { seedOffers } from '../../data/offers'
-import { usePersistentState } from '../../lib/usePersistentState'
-import { campaignStatuses, formatDate, formatDateTime, seedCampaigns, timelineSteps } from '../../services/campaigns'
-import type { CampaignChannel, CampaignRecord, CampaignStatus, Offer } from '../../types/domain'
+import { formatCount, resultUnit } from '../../lib/results'
+import { useResults } from '../../lib/useResults'
+import { useCurrentUser } from '../../lib/currentUser'
+import { campaignStatuses, formatDate, formatDateTime, timelineSteps } from '../../services/campaigns'
+import type { CampaignChannel, CampaignRecord, CampaignStatus } from '../../types/domain'
 
 const channelIcon: Record<CampaignChannel, typeof Mail> = { Email: Mail, Social: MessageSquareText, Website: Globe2 }
 
 export function CampaignsWorkspace({ onOpenCampaign }: { onOpenCampaign: (campaign: CampaignRecord) => void }) {
-  const [storedCampaigns] = usePersistentState<CampaignRecord[]>('otel:campaigns', [])
-  const [offers] = usePersistentState<Offer[]>('otel:offers', seedOffers)
+  const { campaigns: allCampaigns, results } = useResults()
+  const { canAccess } = useCurrentUser()
+  const campaigns = allCampaigns.filter((campaign) => canAccess(campaign.departmentKey))
   const [filter, setFilter] = useState<CampaignStatus | 'All'>('All')
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
-  const campaigns = useMemo(() => {
-    const stored = new Set(storedCampaigns.map((campaign) => campaign.id))
-    return [...storedCampaigns, ...seedCampaigns(departments, offers).filter((seed) => !stored.has(seed.id))]
-  }, [storedCampaigns, offers])
 
   const visible = campaigns.filter((campaign) => filter === 'All' || campaign.status === filter)
   const selected = campaigns.find((campaign) => campaign.id === selectedId) ?? visible[0] ?? null
@@ -52,6 +50,18 @@ export function CampaignsWorkspace({ onOpenCampaign }: { onOpenCampaign: (campai
                   <small>{department?.name}</small>
                   <strong>{campaign.name}</strong>
                   <span>{campaign.objective}</span>
+                  {(() => {
+                    const result = results.find((item) => item.campaign.id === campaign.id)
+                    if (!result || !department) return null
+                    const unit = resultUnit(department)
+                    return (
+                      <span className={`campaign-card-result ${result.state}`}>
+                        {result.state === 'projection'
+                          ? `Projected ${formatCount(result.projected.bookings)} ${unit}`
+                          : `${formatCount(result.shown.bookings)} ${unit} ${result.state === 'live' ? 'so far' : 'total'}`}
+                      </span>
+                    )
+                  })()}
                   <span className="campaign-card-footer">
                     {formatDate(campaign.startDate)} – {formatDate(campaign.endDate)}
                     <span className="channel-icons">

@@ -26,6 +26,9 @@ export const routes = [
 
 export type AppRoute = (typeof routes)[number]['id']
 
+// Presenter-only page: reachable at /demo, not shown in the sidebar.
+export const hiddenFromNav: AppRoute[] = ['demo']
+
 export function routeFromPath(pathname: string): AppRoute {
   return routes.find((route) => route.path === pathname)?.id ?? 'brain'
 }

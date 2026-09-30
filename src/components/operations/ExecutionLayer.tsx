@@ -13,7 +13,7 @@ type ChannelState = {
 
 const idleState: ChannelState = { status: 'idle', stage: null, progress: '' }
 
-export function ExecutionLayer({ onActivity }: { onActivity: (event: ActivityEvent) => void }) {
+export function ExecutionLayer({ onActivity, readOnly = false }: { onActivity: (event: ActivityEvent) => void; readOnly?: boolean }) {
   const [channelState, setChannelState] = useState<Record<string, ChannelState>>({})
 
   async function runChannelAction(title: string, connected: boolean) {
@@ -57,6 +57,8 @@ export function ExecutionLayer({ onActivity }: { onActivity: (event: ActivityEve
             </div>
             {status === 'Future' ? (
               <button type="button" disabled title="Planned for a later phase">Coming soon</button>
+            ) : readOnly ? (
+              <button type="button" disabled title="Integrations are managed by the hotel manager">Hotel manager</button>
             ) : (
               <button
                 type="button"

@@ -27,6 +27,7 @@ export type CampaignInput = {
   audience: string[]
   offerId: string | null
   offer: string
+  offerTerms?: string
   goal: string
   startDate: string
   endDate: string
@@ -39,14 +40,21 @@ const channelApproval: Record<CampaignChannel, ApprovalChannel> = {
   Website: 'Website',
 }
 
+export function localDate(value: Date | string = new Date()): string {
+  const date = typeof value === 'string' ? new Date(value.length === 10 ? `${value}T12:00:00` : value) : value
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 export function addDays(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T12:00:00`)
+  const date = new Date(`${localDate(isoDate)}T12:00:00`)
   date.setDate(date.getDate() + days)
-  return date.toISOString().slice(0, 10)
+  return localDate(date)
 }
 
 export function formatDate(isoDate: string): string {
-  return new Date(`${isoDate.slice(0, 10)}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(`${localDate(isoDate)}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export function formatDateTime(iso: string): string {
@@ -67,13 +75,13 @@ function campaignNameFor(department: Department): string {
 }
 
 export function toCampaignInput(campaign: CampaignRecord): CampaignInput {
-  const { name, type, objective, audience, offerId, offer, goal, startDate, endDate, channels } = campaign
-  return { name, type, objective, audience, offerId, offer, goal, startDate, endDate, channels }
+  const { name, type, objective, audience, offerId, offer, offerTerms, goal, startDate, endDate, channels } = campaign
+  return { name, type, objective, audience, offerId, offer, offerTerms, goal, startDate, endDate, channels }
 }
 
 export function defaultCampaignInput(department: Department, offers: Offer[]): CampaignInput {
   const offer = offers.find((item) => item.departmentKey === department.key && item.status === 'Active')
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDate()
   return {
     name: campaignNameFor(department),
     type: 'Promote an existing offer',
@@ -81,10 +89,26 @@ export function defaultCampaignInput(department: Department, offers: Offer[]): C
     audience: department.audience.slice(0, 2),
     offerId: offer?.id ?? null,
     offer: offer?.name ?? department.offer,
+    offerTerms: offer?.terms,
     goal: `Close the gap: ${department.recommendation.summary.split('. ')[0].replace(/\.$/, '')}.`,
     startDate: offer?.startDate ?? addDays(today, 7),
     endDate: offer?.endDate ?? addDays(today, 28),
-    channels: ['Email', 'Social', 'Website'],
+    channels: offer?.channels ?? ['Email', 'Social', 'Website'],
+  }
+}
+
+export function presetForOffer(department: Department, offers: Offer[], offer: Offer): CampaignInput {
+  return {
+    ...defaultCampaignInput(department, offers),
+    name: offer.name,
+    type: 'Promote an existing offer',
+    objective: `Promote ${offer.name}`,
+    offerId: offer.id,
+    offer: offer.name,
+    offerTerms: offer.terms,
+    startDate: offer.startDate,
+    endDate: offer.endDate,
+    channels: offer.channels ?? ['Email', 'Social', 'Website'],
   }
 }
 
@@ -98,7 +122,7 @@ function defaultEmail(department: Department, input: CampaignInput): EmailConten
     previewText: department.headline,
     headline: input.name,
     body: guestMessage(department, input),
-    offerDetails: `${input.offer}. Available ${formatDate(input.startDate)} to ${formatDate(input.endDate)}, subject to availability.`,
+    offerDetails: `${input.offer}. ${input.offerTerms ? `${input.offerTerms} ` : ''}Available ${formatDate(input.startDate)} to ${formatDate(input.endDate)}, subject to availability.`,
     ctaText: 'Book now',
     senderName: activeHotel.name,
     reminder: false,

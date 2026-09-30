@@ -89,6 +89,7 @@ async function handleRecommendation(req, res) {
     'alternatives should be 2 other ideas the manager could consider instead. ' +
     'Treat sourceState honestly: never give High confidence when the data is Detected, Stale or Unavailable. ' +
     'Use activeOffers and upcomingDates as inputs; prefer promoting an existing offer over inventing a discount. ' +
+    'hotelRules are non-negotiable rules set by the hotel: never recommend anything that breaks them, and reflect them in avoid. ' +
     'Use "Monitor only" when the signal is too thin or recent action is already in flight; use "Revenue review" when the issue is pricing/rate strategy rather than marketing; ' +
     'use "OTA/distribution review" when the gap looks like a channel-mix problem; use "Corporate action" when it needs a decision above the department head.'
 

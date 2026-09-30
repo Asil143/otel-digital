@@ -1,8 +1,12 @@
-import { Check, ChevronDown, CircleAlert, DatabaseZap, Lightbulb, Sparkles } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, DatabaseZap, Lightbulb, ShieldCheck, Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { ageLabel, cappedConfidence, type Freshness } from '../../lib/freshness'
 import { generateRecommendation } from '../../services/aiMarketing'
-import type { Department, KeyDate, Offer, Recommendation } from '../../types/domain'
+import { localDate } from '../../services/campaigns'
+import { seedRules } from '../../data/brain'
+import { usePersistentState } from '../../lib/usePersistentState'
+import { hasNewerData } from '../../lib/signalStore'
+import type { Department, HotelRule, KeyDate, Offer, Recommendation } from '../../types/domain'
 
 export function RecommendationPanel({
   department,
@@ -15,10 +19,13 @@ export function RecommendationPanel({
   offers: Offer[]
   keyDates: KeyDate[]
 }) {
-  const [live, setLive] = useState<Record<string, Recommendation>>({})
+  const [liveStore, setLiveStore] = usePersistentState<Record<string, { recommendation: Recommendation; at: string }>>('otel:live-recommendations', {})
+  const live = Object.fromEntries(Object.entries(liveStore).map(([key, value]) => [key, value.recommendation]))
   const [refreshNote, setRefreshNote] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [showIdeas, setShowIdeas] = useState(false)
+  const [showRules, setShowRules] = useState(false)
+  const [rules] = usePersistentState<HotelRule[]>('otel:hotel-rules', seedRules)
 
   const recommendation = live[department.key] ?? department.recommendation
   const confidence = cappedConfidence(recommendation.confidence, freshness.state)
@@ -28,7 +35,7 @@ export function RecommendationPanel({
 
   async function refreshWithAi() {
     setLoading(true)
-    const today = new Date().toISOString().slice(0, 10)
+    const today = localDate()
     const { recommendation: result, live: reachedAi } = await generateRecommendation(department, {
       sourceState: freshness.state,
       latestUpdate: latest ? latest.summary : null,
@@ -36,8 +43,9 @@ export function RecommendationPanel({
       upcomingDates: keyDates
         .filter((date) => (date.departmentKey === department.key || date.departmentKey === 'all') && date.date >= today)
         .map((date) => `${date.name} on ${date.date}`),
+      hotelRules: rules.map((rule) => rule.text),
     })
-    if (reachedAi) setLive((current) => ({ ...current, [department.key]: result }))
+    if (reachedAi) setLiveStore((current) => ({ ...current, [department.key]: { recommendation: result, at: new Date().toISOString() } }))
     setRefreshNote((current) => ({
       ...current,
       [department.key]: reachedAi
@@ -90,10 +98,30 @@ export function RecommendationPanel({
           </span>
         </span>
       </div>
+      {hasNewerData(latest, liveStore[department.key]?.at) && (
+        <p className="stale-rec-note">
+          New data was confirmed {ageLabel(freshness.ageDays).replace('updated ', '')} since this recommendation was made. Refresh it so the AI uses the latest figures.
+        </p>
+      )}
       {capped && (
         <p className="confidence-note">
           Confidence limited from {recommendation.confidence} because the latest {department.name} data is {freshness.state.toLowerCase()}. Confirm or refresh it in Update My AI.
         </p>
+      )}
+
+      {rules.length > 0 && (
+        <>
+          <button type="button" className="rules-toggle" onClick={() => setShowRules((current) => !current)} aria-expanded={showRules}>
+            <ShieldCheck size={15} /> Follows {rules.length} hotel rule{rules.length === 1 ? '' : 's'} <ChevronDown size={15} className={showRules ? 'rotated' : ''} />
+          </button>
+          {showRules && (
+            <ul className="ideas-list">
+              {rules.map((rule) => (
+                <li key={rule.id}>{rule.text}</li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
       <button type="button" className="ideas-toggle" onClick={() => setShowIdeas((current) => !current)} aria-expanded={showIdeas}>

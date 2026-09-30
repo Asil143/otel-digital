@@ -16,7 +16,7 @@ const script = [
   'Switch to Golf: stale data shows a check-in prompt and a "Monitor only" outcome instead of a campaign.',
   'Create campaign from the top bar: the form is pre-filled from the AI recommendation.',
   'Walk the stages: Socials, Designs, Emails (send a test), Website, Audience.',
-  'Switch role to Department manager: approvals lock; switch back to Hotel manager and Approve & send.',
+  'Switch user (bottom of sidebar) to Sarah Mitchell, Spa manager: only Spa is visible and approvals lock. Switch back to Hannah Smith and Approve & send.',
   'Results: save an insight, then show it in Hotel Brain.',
   'Offers, Calendar and Audience: add an offer, a key date, import a CSV of contacts.',
 ]

@@ -17,6 +17,7 @@ export function CreateCampaignForm({
   offers,
   initialInput,
   mode,
+  presetFrom,
   onSubmit,
   onCancel,
 }: {
@@ -25,6 +26,7 @@ export function CreateCampaignForm({
   offers: Offer[]
   initialInput?: CampaignInput
   mode: 'create' | 'edit'
+  presetFrom?: string
   onSubmit: (departmentKey: DepartmentKey, input: CampaignInput) => void
   onCancel: () => void
 }) {
@@ -34,6 +36,8 @@ export function CreateCampaignForm({
   const [errors, setErrors] = useState<string[]>([])
 
   const departmentOffers = offers.filter((offer) => offer.departmentKey === departmentKey && offer.status !== 'Archived')
+  const selectedOffer = offers.find((offer) => offer.id === input.offerId) ?? null
+  const eligible = (channel: CampaignChannel) => !selectedOffer?.channels || selectedOffer.channels.includes(channel)
 
   function update<K extends keyof CampaignInput>(key: K, value: CampaignInput[K]) {
     setInput((current) => ({ ...current, [key]: value }))
@@ -52,12 +56,23 @@ export function CreateCampaignForm({
 
   function handleOfferChange(offerId: string) {
     if (offerId === CUSTOM_OFFER) {
-      setInput((current) => ({ ...current, offerId: null, offer: '' }))
+      setInput((current) => ({ ...current, offerId: null, offer: '', offerTerms: undefined }))
       return
     }
     const offer = offers.find((item) => item.id === offerId)
     if (!offer) return
-    setInput((current) => ({ ...current, offerId: offer.id, offer: offer.name, startDate: offer.startDate, endDate: offer.endDate }))
+    setInput((current) => {
+      const allowed = current.channels.filter((channel) => !offer.channels || offer.channels.includes(channel))
+      return {
+        ...current,
+        offerId: offer.id,
+        offer: offer.name,
+        offerTerms: offer.terms,
+        startDate: offer.startDate,
+        endDate: offer.endDate,
+        channels: allowed.length ? allowed : offer.channels ?? current.channels,
+      }
+    })
   }
 
   function handleSubmit() {
@@ -78,8 +93,17 @@ export function CreateCampaignForm({
         <div className="ai-suggestion-banner">
           <Sparkles size={16} />
           <div>
-            <strong>AI suggestion: {department.recommendation.title}</strong>
-            <span>Fields are pre-filled from the recommendation. Change anything before creating.</span>
+            {presetFrom ? (
+              <>
+                <strong>From the offer: {presetFrom}</strong>
+                <span>Dates, terms and eligible channels come from the offer. Change anything before creating.</span>
+              </>
+            ) : (
+              <>
+                <strong>AI suggestion: {department.recommendation.title}</strong>
+                <span>Fields are pre-filled from the recommendation. Change anything before creating.</span>
+              </>
+            )}
           </div>
           <button type="button" onClick={() => setInput(defaultCampaignInput(department, offers))}>Reset</button>
         </div>
@@ -119,6 +143,12 @@ export function CreateCampaignForm({
             <option value={CUSTOM_OFFER}>Custom message</option>
           </select>
         </label>
+        {selectedOffer?.terms && (
+          <p className="offer-terms-hint span-full">
+            <strong>Terms:</strong> {selectedOffer.terms}
+            {selectedOffer.channels && ` · Eligible channels: ${selectedOffer.channels.join(', ')}`}
+          </p>
+        )}
         {input.offerId === null && (
           <label>
             <span>Offer / message</span>
@@ -152,8 +182,12 @@ export function CreateCampaignForm({
       <fieldset className="chip-fieldset">
         <legend>Channels</legend>
         {channelOptions.map(({ value, label }) => (
-          <label key={value} className={`choice-chip ${input.channels.includes(value) ? 'selected' : ''}`}>
-            <input type="checkbox" checked={input.channels.includes(value)} onChange={() => update('channels', toggleIn(input.channels, value))} />
+          <label
+            key={value}
+            className={`choice-chip ${input.channels.includes(value) ? 'selected' : ''} ${eligible(value) ? '' : 'disabled'}`}
+            title={eligible(value) ? undefined : 'Not eligible for this offer'}
+          >
+            <input type="checkbox" disabled={!eligible(value)} checked={input.channels.includes(value)} onChange={() => update('channels', toggleIn(input.channels, value))} />
             {label}
           </label>
         ))}

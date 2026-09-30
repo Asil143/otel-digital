@@ -3,4 +3,6 @@ export type ActivityEvent = {
   title: string
   detail: string
   tone: 'success' | 'warning' | 'info'
+  at?: string
+  area?: string
 }
