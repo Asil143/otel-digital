@@ -1,0 +1,52 @@
+:root {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Playfair Display", Georgia, serif;
+  font-family: var(--font-sans);
+  color: #1f2b26;
+  background: #f7f5ef;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+textarea,
+input,
+select {
+  font: inherit;
+}
+
+textarea,
+input,
+select {
+  color: #1f2b26;
+  background: #ffffff;
+  border: 1px solid #e7e2d5;
+}
+
+textarea::placeholder,
+input::placeholder {
+  color: #8a8a76;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid #d8d2c2;
+  outline-offset: 2px;
+}
+
+img {
+  max-width: 100%;
+}
