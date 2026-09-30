@@ -17,7 +17,7 @@ export function CreateCampaignForm({
   offers,
   initialInput,
   mode,
-  presetFrom,
+  preset,
   onSubmit,
   onCancel,
 }: {
@@ -26,7 +26,7 @@ export function CreateCampaignForm({
   offers: Offer[]
   initialInput?: CampaignInput
   mode: 'create' | 'edit'
-  presetFrom?: string
+  preset?: { title: string; detail: string }
   onSubmit: (departmentKey: DepartmentKey, input: CampaignInput) => void
   onCancel: () => void
 }) {
@@ -93,10 +93,10 @@ export function CreateCampaignForm({
         <div className="ai-suggestion-banner">
           <Sparkles size={16} />
           <div>
-            {presetFrom ? (
+            {preset ? (
               <>
-                <strong>From the offer: {presetFrom}</strong>
-                <span>Dates, terms and eligible channels come from the offer. Change anything before creating.</span>
+                <strong>{preset.title}</strong>
+                <span>{preset.detail}</span>
               </>
             ) : (
               <>

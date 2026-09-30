@@ -1,15 +1,15 @@
 import { useMemo } from 'react'
-import { seedContacts } from '../data/contacts'
 import { departments } from '../data/departments'
 import { seedOffers } from '../data/offers'
-import type { Contact, DepartmentKey, Offer } from '../types/domain'
+import type { DepartmentKey, Offer } from '../types/domain'
 import { useCampaigns } from './campaignStore'
 import { computeResults, type CampaignResults } from './results'
+import { useContacts } from './audience'
 import { usePersistentState } from './usePersistentState'
 
 export function useResults() {
-  const { campaigns, upsert } = useCampaigns()
-  const [contacts] = usePersistentState<Contact[]>('otel:audience-contacts', seedContacts)
+  const { campaigns, upsert, remove } = useCampaigns()
+  const [contacts] = useContacts()
   const [offers] = usePersistentState<Offer[]>('otel:offers', seedOffers)
 
   const results = useMemo(
@@ -25,5 +25,5 @@ export function useResults() {
     return results.filter((result) => result.campaign.departmentKey === key)
   }
 
-  return { campaigns, upsert, results, forDepartment, contacts, offers }
+  return { campaigns, upsert, remove, results, forDepartment, contacts, offers }
 }

@@ -41,8 +41,8 @@ export function RecommendationPanel({
       latestUpdate: latest ? latest.summary : null,
       activeOffers: offers.filter((offer) => offer.departmentKey === department.key && offer.status === 'Active').map((offer) => `${offer.name} (${offer.price})`),
       upcomingDates: keyDates
-        .filter((date) => (date.departmentKey === department.key || date.departmentKey === 'all') && date.date >= today)
-        .map((date) => `${date.name} on ${date.date}`),
+        .filter((date) => (date.departmentKey === department.key || date.departmentKey === 'all') && (date.endDate ?? date.date) >= today)
+        .map((date) => `${date.name} (${date.kind.toLowerCase()}) ${date.endDate ? `${date.date} to ${date.endDate}` : `on ${date.date}`}`),
       hotelRules: rules.map((rule) => rule.text),
     })
     if (reachedAi) setLiveStore((current) => ({ ...current, [department.key]: { recommendation: result, at: new Date().toISOString() } }))

@@ -1,46 +1,10 @@
 import { addDays, localDate } from '../services/campaigns'
+import { eligibleFor, segmentStats } from './audience'
 import type { CampaignChannel, CampaignRecord, Contact, Department, Offer } from '../types/domain'
 
-const segmentSizes: Record<string, number> = {
-  'Past leisure guests': 8240,
-  'Lapsed guests': 5120,
-  'Local audience within 50 miles': 18400,
-  'Family travellers': 6220,
-  'Past spa guests': 3180,
-  'Local audience within 15 miles': 9600,
-  'Health club members': 740,
-  'Afternoon tea buyers': 1260,
-  'Past restaurant guests': 4420,
-  'Local diners within 15 miles': 7300,
-  'Hotel guests dining interest': 2150,
-  'Loyalty members': 6200,
-  'Past enquiry contacts': 610,
-  'Wedding planners': 85,
-  'Local venue search traffic': 2400,
-  'Past salon guests': 1340,
-  'Hotel guests with spa interest': 2900,
-  'Golf members': 420,
-  'Past society bookers': 160,
-  'Local golf audience': 3100,
-  'Past corporate bookers': 980,
-  'Local business contacts': 2600,
-  'Local day-trippers': 5400,
-  'Hotel guests': 7800,
-  'Past beach club visitors': 2200,
-}
-
-export function segmentSize(segment: string): number {
-  return segmentSizes[segment] ?? 1000
-}
-
-export function consentRate(contacts: Contact[]): number {
-  if (contacts.length === 0) return 0.75
-  return contacts.filter((contact) => contact.permission === 'Subscribed').length / contacts.length
-}
-
+/** Guests the campaign can reach after consent and suppression checks — from the Audience catalogue. */
 export function eligibleAudience(campaign: Pick<CampaignRecord, 'audience'>, contacts: Contact[]): number {
-  const total = campaign.audience.reduce((sum, segment) => sum + segmentSize(segment), 0)
-  return Math.round(total * consentRate(contacts))
+  return eligibleFor(campaign.audience, segmentStats(contacts))
 }
 
 function parsePrice(text: string): number | null {
@@ -204,11 +168,14 @@ export type Insight = {
 export function buildInsights(results: CampaignResults): Insight[] {
   const { campaign, channels, shown, eligible, openRate, unit } = results
   const insights: Insight[] = []
-  const best = [...channels].sort((a, b) => b.bookings - a.bookings)[0]
-  const total = shown.bookings
+  // Shares use whole numbers so the percentage matches the counts shown alongside it.
+  const total = Math.round(shown.bookings)
+  const whole = roundShares(channels.map((item) => item.bookings), total)
+  const bestIndex = whole.reduce((top, value, index) => (value > whole[top] ? index : top), 0)
+  const best = channels[bestIndex]
 
-  if (best && total >= 1) {
-    const share = Math.round((best.bookings / total) * 100)
+  if (best && total >= 1 && whole[bestIndex] > 0) {
+    const share = Math.round((whole[bestIndex] / total) * 100)
     insights.push({ text: `${best.channel} drives most results: ${share}% of ${unit} so far.`, kind: 'Worked' })
   }
   if (campaign.channels.includes('Email')) {
@@ -279,4 +246,31 @@ export function formatMoney(value: number): string {
 
 export function formatCount(value: number): string {
   return Math.round(value).toLocaleString()
+}
+
+/** "1 direct booking", "3 covers", "1 weekday enquiry". */
+export function countUnit(count: number, unit: string): string {
+  const n = Math.round(count)
+  if (n !== 1) return `${formatCount(n)} ${unit}`
+  const words = unit.split(' ')
+  const last = words.pop() ?? unit
+  const singular = /ies$/.test(last) ? last.replace(/ies$/, 'y') : /s$/.test(last) ? last.slice(0, -1) : last
+  return `1 ${[...words, singular].join(' ')}`
+}
+
+/**
+ * Rounds parts so they add up to the rounded total (largest remainder), so a channel
+ * breakdown never shows 3 + 1 + 1 against a total of 4.
+ */
+export function roundShares(values: number[], total = Math.round(values.reduce((sum, value) => sum + value, 0))): number[] {
+  const floors = values.map((value) => Math.floor(value))
+  let remaining = total - floors.reduce((sum, value) => sum + value, 0)
+  const order = values.map((value, index) => ({ index, remainder: value - Math.floor(value) })).sort((a, b) => b.remainder - a.remainder)
+  const result = [...floors]
+  for (const { index } of order) {
+    if (remaining <= 0) break
+    result[index] += 1
+    remaining -= 1
+  }
+  return result
 }

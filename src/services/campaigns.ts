@@ -7,6 +7,7 @@ import type {
   CampaignTimelineStep,
   Department,
   EmailContent,
+  KeyDate,
   Offer,
   SocialPost,
   WebsiteContent,
@@ -94,6 +95,26 @@ export function defaultCampaignInput(department: Department, offers: Offer[]): C
     startDate: offer?.startDate ?? addDays(today, 7),
     endDate: offer?.endDate ?? addDays(today, 28),
     channels: offer?.channels ?? ['Email', 'Social', 'Website'],
+  }
+}
+
+/** A campaign aimed at a key date: runs up to an event, or across a quiet period. */
+export function presetForKeyDate(department: Department, offers: Offer[], keyDate: KeyDate, today = localDate()): CampaignInput {
+  const base = defaultCampaignInput(department, offers)
+  const end = keyDate.endDate ?? keyDate.date
+  const earliest = addDays(today, 3)
+  const quiet = keyDate.kind === 'Quiet period'
+  const lead = addDays(keyDate.date, quiet ? -14 : -21)
+  const startDate = lead > earliest ? lead : earliest
+  return {
+    ...base,
+    name: quiet ? `Fill the ${keyDate.name.toLowerCase()}` : keyDate.name,
+    type: quiet ? 'Fill a quiet period' : base.type,
+    objective: quiet
+      ? `Fill the ${keyDate.name.toLowerCase()} (${formatDate(keyDate.date)}${end !== keyDate.date ? ` – ${formatDate(end)}` : ''})`
+      : `Promote ${department.name} for ${keyDate.name} on ${formatDate(keyDate.date)}`,
+    startDate: startDate > end ? end : startDate,
+    endDate: end,
   }
 }
 
@@ -236,7 +257,10 @@ export function seedCampaigns(departments: Department[], offers: Offer[]): Campa
   return departments.flatMap((department) => {
     const seed = seedStates[department.key]
     if (!seed) return []
-    const base = createCampaign(department, defaultCampaignInput(department, offers), `HVH-${department.key}-seed`, seedStamp['Content created'])
+    const input = defaultCampaignInput(department, offers)
+    // A live campaign's window starts the day it went live, even if the offer it promotes starts later.
+    const windowed = seed.steps.includes('Live') ? { ...input, startDate: seedStamp.Live.slice(0, 10) } : input
+    const base = createCampaign(department, windowed, `HVH-${department.key}-seed`, seedStamp['Content created'])
     const approvals = { ...base.approvals }
     for (const channel of seed.approvals) approvals[channel] = true
     const timeline = { ...base.timeline }

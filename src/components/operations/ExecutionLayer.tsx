@@ -1,44 +1,41 @@
 import { PlugZap } from 'lucide-react'
 import { useState } from 'react'
 import { integrationChannels } from '../../data/workflows'
-import { createPublishJob, type PublishStage } from '../../services/mockApi'
 import type { ActivityEvent } from '../../types/activity'
 import { StateBlock } from '../ui/StateBlock'
 
-type ChannelState = {
-  status: 'idle' | 'running' | 'success' | 'error'
-  stage: PublishStage | null
-  progress: string
+type Check = { status: 'idle' | 'running' | 'done'; step: string; result: string }
+
+const steps: Record<'Demo mode' | 'Manual export', { label: string; result: string }[]> = {
+  'Demo mode': [
+    { label: 'Checking credentials', result: '' },
+    { label: 'No API key configured', result: '' },
+    { label: 'Staying in demo mode', result: 'Not connected — approved content is kept ready and sends are simulated.' },
+  ],
+  'Manual export': [
+    { label: 'Checking approved posts', result: '' },
+    { label: 'Preparing export', result: 'Export ready — approved posts are published by hand, with an audit entry.' },
+  ],
 }
 
-const idleState: ChannelState = { status: 'idle', stage: null, progress: '' }
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
+/** Integrations are honest about their state: nothing is sent to a real provider in this build. */
 export function ExecutionLayer({ onActivity, readOnly = false }: { onActivity: (event: ActivityEvent) => void; readOnly?: boolean }) {
-  const [channelState, setChannelState] = useState<Record<string, ChannelState>>({})
+  const [checks, setChecks] = useState<Record<string, Check>>({})
 
-  async function runChannelAction(title: string, connected: boolean) {
-    setChannelState((current) => ({ ...current, [title]: { status: 'running', stage: null, progress: '' } }))
-
-    const result = await createPublishJob(title, connected, (stage, index, total) => {
-      setChannelState((current) => ({
-        ...current,
-        [title]: { status: 'running', stage, progress: `${index + 1}/${total}` },
-      }))
-    })
-
-    const nextStatus = result.status === 'queued' ? 'success' : 'error'
-    setChannelState((current) => ({ ...current, [title]: { status: nextStatus, stage: null, progress: '' } }))
-
-    onActivity({
-      id: crypto.randomUUID(),
-      title: connected ? `${title} job queued` : `${title} fallback planned`,
-      detail: result.message,
-      tone: connected ? 'success' : 'warning',
-    })
+  async function test(title: string, status: 'Demo mode' | 'Manual export') {
+    for (const step of steps[status]) {
+      setChecks((current) => ({ ...current, [title]: { status: 'running', step: step.label, result: '' } }))
+      await wait(380)
+    }
+    const result = steps[status][steps[status].length - 1].result
+    setChecks((current) => ({ ...current, [title]: { status: 'done', step: '', result } }))
+    onActivity({ id: crypto.randomUUID(), title: `${title} connection tested`, detail: result, tone: status === 'Demo mode' ? 'warning' : 'info', area: 'Hotel-wide' })
   }
 
   return (
-    <section className="panel">
+    <section className="panel integrations-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Execution layer</p>
@@ -46,36 +43,35 @@ export function ExecutionLayer({ onActivity, readOnly = false }: { onActivity: (
         </div>
         <PlugZap size={22} />
       </div>
-      {integrationChannels.map(({ title, detail, status, icon: Icon }) => {
-        const state = channelState[title] ?? idleState
+      <p className="muted small">No provider is connected in this build: approved content is prepared and publishing is simulated.</p>
+      {integrationChannels.map(({ title, provider, detail, status, icon: Icon }) => {
+        const check = checks[title]
         return (
           <div className="channel-row" key={title}>
             <Icon size={18} />
             <div>
-              <strong>{title}</strong>
-              <span>{detail}</span>
+              <strong>
+                {title} <span className={`integration-status status-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</span>
+              </strong>
+              <span>
+                {provider} · {detail}
+              </span>
             </div>
             {status === 'Future' ? (
-              <button type="button" disabled title="Planned for a later phase">Coming soon</button>
+              <button type="button" disabled title="Planned for a later phase">
+                Coming soon
+              </button>
             ) : readOnly ? (
-              <button type="button" disabled title="Integrations are managed by the hotel manager">Hotel manager</button>
+              <button type="button" disabled title="Integrations are managed by the hotel manager">
+                Hotel manager
+              </button>
             ) : (
-              <button
-                type="button"
-                onClick={() => runChannelAction(title, status === 'Connected')}
-                disabled={state.status === 'running'}
-              >
-                {status === 'Connected' ? 'Queue' : 'Plan'}
+              <button type="button" onClick={() => test(title, status)} disabled={check?.status === 'running'}>
+                Test connection
               </button>
             )}
-            {state.status === 'running' && (
-              <StateBlock
-                state="loading"
-                message={state.stage ? `${state.progress} · ${state.stage.label} — ${state.stage.detail}` : 'Starting...'}
-              />
-            )}
-            {state.status === 'success' && <StateBlock state="empty" message="Queued with audit checks." />}
-            {state.status === 'error' && <StateBlock state="error" message="Manual fallback required." />}
+            {check?.status === 'running' && <StateBlock state="loading" message={`${check.step}…`} />}
+            {check?.status === 'done' && <StateBlock state={status === 'Demo mode' ? 'error' : 'empty'} message={check.result} />}
           </div>
         )
       })}

@@ -16,9 +16,10 @@ import { departments } from '../data/departments'
 import { seedKeyDates } from '../data/offers'
 import { resolveFreshness, signalsFor } from '../lib/freshness'
 import { readStored, usePersistentState, writeStored } from '../lib/usePersistentState'
-import { createCampaign, formatDateTime, localDate, presetForOffer, requiredApprovals, toCampaignInput, type CampaignInput } from '../services/campaigns'
+import { createCampaign, formatDate, formatDateTime, localDate, presetForKeyDate, presetForOffer, requiredApprovals, toCampaignInput, type CampaignInput } from '../services/campaigns'
 import { formatCount, formatMoney, resultUnit } from '../lib/results'
 import { recordActivity } from '../lib/activityLog'
+import { rerunInput } from '../lib/campaignFlow'
 import { useResults } from '../lib/useResults'
 import { ageLabel } from '../lib/freshness'
 import type { ActivityEvent } from '../types/activity'
@@ -39,14 +40,37 @@ export function DepartmentDashboard() {
   const [liveRecommendations] = usePersistentState<Record<string, { at: string }>>('otel:live-recommendations', {})
   const { campaigns, upsert: upsertCampaign, forDepartment, offers } = useResults()
   const [keyDates] = usePersistentState<KeyDate[]>('otel:key-dates', seedKeyDates)
-  const [pendingOfferId] = useState(() => readStored<string | null>('otel:pending-create', null))
-  const [modal, setModal] = useState<'notifications' | 'create' | 'edit' | null>(() => (pendingOfferId ? 'create' : null))
-  const [createPreset, setCreatePreset] = useState<CampaignInput | undefined>(() => {
-    const offer = offers.find((item) => item.id === pendingOfferId)
-    const area = offer && departments.find((item) => item.key === offer.departmentKey)
-    return offer && area ? presetForOffer(area, offers, offer) : undefined
-  })
+  const [pendingCreate] = useState(() =>
+    readStored<{ departmentKey: DepartmentKey; offerId?: string | null; fromCampaignId?: string | null; keyDateId?: string | null } | null>('otel:pending-create', null),
+  )
+  const [modal, setModal] = useState<'notifications' | 'create' | 'edit' | null>(() => (pendingCreate ? 'create' : null))
   const [today] = useState(() => localDate())
+  const [createPreset, setCreatePreset] = useState<{ input: CampaignInput; title: string; detail: string } | undefined>(() => {
+    const source = campaigns.find((item) => item.id === pendingCreate?.fromCampaignId)
+    if (source) {
+      const { input, offerNote } = rerunInput(source, offers, today)
+      return {
+        input,
+        title: `Based on ${source.name}`,
+        detail: offerNote ?? 'Same audience, offer and channels. Dates moved forward — change anything before creating.',
+      }
+    }
+    const keyDate = keyDates.find((item) => item.id === pendingCreate?.keyDateId)
+    const dateArea = keyDate && departments.find((item) => item.key === pendingCreate?.departmentKey)
+    if (keyDate && dateArea) {
+      return {
+        input: presetForKeyDate(dateArea, offers, keyDate, today),
+        title: `For the key date: ${keyDate.name} (${formatDate(keyDate.date)}${keyDate.endDate ? ` – ${formatDate(keyDate.endDate)}` : ''})`,
+        detail: keyDate.kind === 'Quiet period' ? 'Runs across the quiet period. Change anything before creating.' : 'Runs in the weeks leading up to it. Change anything before creating.',
+      }
+    }
+    const offer = offers.find((item) => item.id === pendingCreate?.offerId)
+    const area = offer && departments.find((item) => item.key === offer.departmentKey)
+    return offer && area
+      ? { input: presetForOffer(area, offers, offer), title: `From the offer: ${offer.name}`, detail: 'Dates, terms and eligible channels come from the offer. Change anything before creating.' }
+      : undefined
+  })
+  const [activeCampaignIds, setActiveCampaignIds] = usePersistentState<Partial<Record<DepartmentKey, string>>>('otel:active-campaign', {})
   const [hour] = useState(() => new Date().getHours())
 
   const department = departments.find((item) => item.key === activeDept) ?? departments[0]
@@ -57,10 +81,10 @@ export function DepartmentDashboard() {
 
   const departmentResults = forDepartment(department.key)
 
-  const campaign =
-    campaigns
-      .filter((item) => item.departmentKey === department.key)
-      .sort((a, b) => (b.timeline['Content created'] ?? '').localeCompare(a.timeline['Content created'] ?? ''))[0] ?? null
+  const areaCampaigns = campaigns
+    .filter((item) => item.departmentKey === department.key)
+    .sort((a, b) => (b.timeline['Content created'] ?? '').localeCompare(a.timeline['Content created'] ?? ''))
+  const campaign = areaCampaigns.find((item) => item.id === activeCampaignIds[department.key]) ?? areaCampaigns[0] ?? null
 
   const campaignResult = campaign ? departmentResults.find((result) => result.campaign.id === campaign.id) ?? null : null
   const firstName = user.name.split(' ')[0]
@@ -145,8 +169,8 @@ export function DepartmentDashboard() {
     })
 
   useEffect(() => {
-    if (pendingOfferId) writeStored('otel:pending-create', null)
-  }, [pendingOfferId])
+    if (pendingCreate) writeStored('otel:pending-create', null)
+  }, [pendingCreate])
 
   useEffect(() => {
     if (!allowedDepartments.includes(activeDept)) {
@@ -163,6 +187,7 @@ export function DepartmentDashboard() {
     const target = departments.find((item) => item.key === departmentKey) ?? department
     const created = createCampaign(target, input)
     upsertCampaign(created)
+    setActiveCampaignIds((current) => ({ ...current, [departmentKey]: created.id }))
     setActiveDept(departmentKey)
     setActiveStage('Strategy')
     setModal(null)
@@ -220,6 +245,27 @@ export function DepartmentDashboard() {
           onActivity={addActivity}
         />
       </div>
+
+      {areaCampaigns.length > 1 && campaign && (
+        <div className="area-campaign-switcher" aria-label={`Campaigns in ${department.name}`}>
+          <span>{areaCampaigns.length} campaigns in {department.name}</span>
+          {areaCampaigns.map((item) => (
+            <button
+              type="button"
+              key={item.id}
+              className={item.id === campaign.id ? 'selected' : ''}
+              aria-pressed={item.id === campaign.id}
+              onClick={() => {
+                setActiveCampaignIds((current) => ({ ...current, [department.key]: item.id }))
+                setActiveStage('Strategy')
+              }}
+            >
+              {item.name}
+              <em className={`campaign-status-chip status-${item.status.toLowerCase().replace(/\s+/g, '-')}`}>{item.status}</em>
+            </button>
+          ))}
+        </div>
+      )}
 
       {campaign ? (
         <CampaignEngine
@@ -287,8 +333,8 @@ export function DepartmentDashboard() {
             initialDepartmentKey={department.key}
             offers={offers}
             mode={modal}
-            initialInput={modal === 'edit' && campaign ? toCampaignInput(campaign) : createPreset}
-            presetFrom={modal === 'create' ? createPreset?.offer : undefined}
+            initialInput={modal === 'edit' && campaign ? toCampaignInput(campaign) : createPreset?.input}
+            preset={modal === 'create' && createPreset ? { title: createPreset.title, detail: createPreset.detail } : undefined}
             onSubmit={modal === 'create' ? handleCreate : handleEdit}
             onCancel={() => setModal(null)}
           />

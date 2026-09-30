@@ -2,6 +2,7 @@ import { BadgeCheck, Clock3, FileUp, Sparkles, X } from 'lucide-react'
 import { useState, type ChangeEvent } from 'react'
 import { activeHotel } from '../../config/hotel'
 import { sourceStates } from '../../data/workflows'
+import { readableReport } from '../../lib/assets'
 import { ageLabel, daysSince, needsCheckIn, signalsFor, type Freshness } from '../../lib/freshness'
 import { structureBusinessSignal } from '../../services/aiMarketing'
 import type { ActivityEvent } from '../../types/activity'
@@ -44,7 +45,7 @@ export function UpdateMyAiPanel({
   const [activeTab, setActiveTab] = useState<Tab>('Quick update')
   const [messageByDepartment, setMessageByDepartment] = useState<Record<string, string>>({})
   const [forwardedEmail, setForwardedEmail] = useState('')
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number } | null>(null)
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; text: string | null } | null>(null)
   const [checkInLevels, setCheckInLevels] = useState<Record<string, CheckInLevel>>({})
   const [structuring, setStructuring] = useState(false)
   const [showLegend, setShowLegend] = useState(false)
@@ -62,17 +63,18 @@ export function UpdateMyAiPanel({
     setMessageByDepartment((prev) => ({ ...prev, [department.key]: value.slice(0, MAX_UPDATE_LENGTH) }))
   }
 
-  function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileSelect(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
+    event.target.value = ''
     if (!file) return
-    setUploadedFile({ name: file.name, size: file.size })
+    // Only plain-text reports can be read in the browser; the AI must never be asked to guess figures from a file name.
+    const text = readableReport(file.name) ? (await file.text()).slice(0, 6000) : null
+    setUploadedFile({ name: file.name, size: file.size, text })
   }
 
   function buildMessageForActiveTab(): string | null {
     if (activeTab === 'Upload file') {
-      return uploadedFile
-        ? `Uploaded ${uploadedFile.name} (${(uploadedFile.size / 1024).toFixed(0)} KB) for ${department.name}. Extract demand, offers, and dates.`
-        : null
+      return uploadedFile?.text ? `Report file: ${uploadedFile.name}\n\n${uploadedFile.text}` : null
     }
     if (activeTab === 'Forward email') return forwardedEmail.trim() || null
     if (activeTab === 'Check-in') {
@@ -188,6 +190,12 @@ export function UpdateMyAiPanel({
             <span className="secondary-button">Choose screenshot, PDF, Excel or CSV</span>
           </label>
           {uploadedFile && <span>{uploadedFile.name} · {(uploadedFile.size / 1024).toFixed(0)} KB</span>}
+          {uploadedFile && !uploadedFile.text && (
+            <span className="upload-note">
+              PDFs, spreadsheets and screenshots are read in Files &amp; Media, where you check each figure. Save it as CSV to send it from here.
+            </span>
+          )}
+          {!uploadedFile && <span className="upload-note">CSV and text reports are read here. Other formats go through Files &amp; Media.</span>}
         </div>
       )}
 

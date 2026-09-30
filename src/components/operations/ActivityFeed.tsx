@@ -55,7 +55,7 @@ export function ActivityFeed({ area }: { area?: string }) {
               <strong>{event.title}</strong>
               <span>{event.detail}</span>
               <small>
-                {[event.area, timeAgo(event.at)].filter(Boolean).join(' · ')}
+                {[event.actor, event.area, timeAgo(event.at)].filter(Boolean).join(' · ')}
               </small>
             </div>
           </article>

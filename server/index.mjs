@@ -16,9 +16,18 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
+const MAX_BODY_BYTES = 64 * 1024
+
+class BodyTooLarge extends Error {}
+
 async function readBody(req) {
   const chunks = []
-  for await (const chunk of req) chunks.push(chunk)
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > MAX_BODY_BYTES) throw new BodyTooLarge('Request body too large')
+    chunks.push(chunk)
+  }
   if (chunks.length === 0) return {}
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
 }
@@ -64,7 +73,9 @@ async function handleStructureSignal(req, res) {
     'A department manager sends a free-text update about demand or bookings. Extract it into structured signal data. ' +
     'Respond with ONLY a JSON object matching this shape: ' +
     '{"summary": string, "extractedFields": {[key: string]: string}, "confidence": "High"|"Medium"|"Low", "requiresConfirmation": boolean}. ' +
-    'requiresConfirmation should be true unless the manager gave precise, unambiguous figures.'
+    'requiresConfirmation should be true unless the manager gave precise, unambiguous figures. ' +
+    'When sourceType is file_upload, the update contains the text of a report (often CSV): extract its key figures and the period they cover, ' +
+    'using short camelCase keys, and never invent figures that are not in the text.'
 
   const userPrompt = `Business area: ${input.businessArea}\nSource type: ${input.sourceType}\nManager update: "${input.message}"`
 
@@ -144,6 +155,10 @@ const server = createServer(async (req, res) => {
     }
     sendJson(res, 404, { error: 'Not found' })
   } catch (error) {
+    if (error instanceof BodyTooLarge) {
+      sendJson(res, 413, { error: 'Request body too large' })
+      return
+    }
     sendJson(res, 500, { error: String(error.message || error) })
   }
 })

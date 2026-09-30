@@ -87,8 +87,10 @@ export type CampaignAsset = {
 
 export type IntegrationChannel = {
   title: string
+  provider: string
+  /** What the channel does for campaigns. */
   detail: string
-  status: 'Connected' | 'Manual fallback' | 'Future'
+  status: 'Demo mode' | 'Manual export' | 'Future'
   icon: LucideIcon
 }
 
@@ -122,6 +124,8 @@ export type KeyDate = {
   departmentKey: DepartmentKey | 'all'
   name: string
   date: string
+  /** Inclusive last day for multi-day events and quiet periods. */
+  endDate?: string
   kind: 'Event' | 'Quiet period' | 'Deadline'
 }
 
@@ -191,7 +195,7 @@ export type CampaignRecord = {
   timeline: Partial<Record<CampaignTimelineStep, string>>
 }
 
-export type AssetKind = 'Brand' | 'Image' | 'Template' | 'Brochure' | 'Report' | 'Menu'
+export type AssetKind = 'Brand' | 'Image' | 'Video' | 'Template' | 'Brochure' | 'Menu' | 'Price list' | 'Report'
 
 export type MediaAsset = {
   id: string
@@ -201,6 +205,13 @@ export type MediaAsset = {
   status: 'Approved' | 'Pending approval'
   locked: boolean
   addedAt: string
+  /** Bytes, when uploaded on this device. */
+  size?: number
+  addedBy?: string
+  /** Small image preview (URL or data URL). The original file isn't stored in this demo. */
+  preview?: string
+  /** The confirmed signal this report fed, for reports added by extraction. */
+  signalId?: string
 }
 
 export type HotelRule = {
@@ -224,8 +235,17 @@ export type Contact = {
   id: string
   name: string
   email: string
+  /** A segment name from the hotel's catalogue, or 'Unassigned' for imports that didn't match one. */
   segment: string
-  lastActivity: string
+  /** ISO date of the last stay, visit or enquiry. */
+  lastActivity: string | null
   permission: ConsentPermission
+  /** How consent was given (the PDF's consent_basis). Required for anyone who is sent marketing. */
+  consentBasis?: string | null
   guestValue: number
+  /** Never contacted on any channel (the PDF's suppression_status). */
+  suppressed?: boolean
+  suppressionReason?: string | null
+  /** Set for records imported on this device. */
+  addedAt?: string
 }

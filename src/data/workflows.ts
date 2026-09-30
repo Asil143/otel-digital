@@ -21,10 +21,10 @@ export const sourceStates: SourceStateDefinition[] = [
 ]
 
 export const integrationChannels: IntegrationChannel[] = [
-  { title: 'Email provider', detail: 'Brevo · demo mode, not connected', status: 'Connected', icon: Mail },
-  { title: 'Website', detail: 'WordPress · demo mode, not connected', status: 'Connected', icon: Globe2 },
-  { title: 'Social media', detail: 'Approval-ready export', status: 'Manual fallback', icon: Radio },
-  { title: 'Paid media', detail: 'Future integration', status: 'Future', icon: MousePointerClick },
+  { title: 'Email provider', provider: 'Brevo', detail: 'Sends approved emails to consented guests.', status: 'Demo mode', icon: Mail },
+  { title: 'Website', provider: 'WordPress', detail: 'Publishes approved promo blocks and landing pages.', status: 'Demo mode', icon: Globe2 },
+  { title: 'Social media', provider: 'Instagram & Facebook', detail: 'Approved posts are exported to post by hand.', status: 'Manual export', icon: Radio },
+  { title: 'Paid media', provider: 'Meta & Google Ads', detail: 'Planned for a later phase.', status: 'Future', icon: MousePointerClick },
 ]
 
 export const productionGuardrails = [

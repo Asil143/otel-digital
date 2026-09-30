@@ -35,7 +35,7 @@ function fromConfirmedData(metric: Metric, signals: SignalRecord[]): LiveMetric 
 function withLiveData(department: Department, metric: Metric, results: CampaignResults[], keyDates: KeyDate[], today: string, signals: SignalRecord[]): LiveMetric {
   const label = metric.label.toLowerCase()
   const areaDates = keyDates
-    .filter((date) => (date.departmentKey === department.key || date.departmentKey === 'all') && date.date >= today)
+    .filter((date) => (date.departmentKey === department.key || date.departmentKey === 'all') && (date.endDate ?? date.date) >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
 
   if (label === 'campaigns live') {

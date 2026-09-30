@@ -1,6 +1,6 @@
 import type { Confidence, Department, SignalRecord, SourceState } from '../types/domain'
 
-const STALE_AFTER_DAYS = 14
+export const STALE_AFTER_DAYS = 14
 
 export type Freshness = {
   state: SourceState

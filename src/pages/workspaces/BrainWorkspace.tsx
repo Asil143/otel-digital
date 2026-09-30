@@ -23,7 +23,8 @@ import { Modal } from '../../components/ui/Modal'
 import { activeHotel } from '../../config/hotel'
 import type { AppRoute } from '../../config/routes'
 import { seedAssets, seedRules } from '../../data/brain'
-import { seedContacts } from '../../data/contacts'
+import { segmentStats, useContacts } from '../../lib/audience'
+import { kindFromFile } from '../../lib/assets'
 import { departments } from '../../data/departments'
 import { seedKeyDates, seedOffers } from '../../data/offers'
 import { productionGuardrails } from '../../data/workflows'
@@ -36,8 +37,6 @@ import { readStored, usePersistentState, writeStored } from '../../lib/usePersis
 import { useResults } from '../../lib/useResults'
 import { addDays, localDate } from '../../services/campaigns'
 import type {
-  AssetKind,
-  Contact,
   DepartmentKey,
   HotelAccount,
   HotelRule,
@@ -51,13 +50,6 @@ const hotelHeroImage = 'https://images.unsplash.com/photo-1542314831-068cd1dbfee
 
 function areaName(key: DepartmentKey | null): string {
   return key ? departments.find((department) => department.key === key)?.name ?? key : 'Hotel-wide'
-}
-
-function kindFromFile(fileName: string): AssetKind {
-  if (/\.(png|jpe?g|webp|gif)$/i.test(fileName)) return 'Image'
-  if (/menu/i.test(fileName)) return 'Menu'
-  if (/\.(pdf)$/i.test(fileName)) return 'Brochure'
-  return 'Brand'
 }
 
 function readFeedback(keys: DepartmentKey[]): Record<string, number> {
@@ -76,7 +68,7 @@ export function BrainWorkspace({ onNavigate }: { onNavigate: (route: AppRoute) =
   const [assets, setAssets] = usePersistentState<MediaAsset[]>('otel:assets', seedAssets)
   const [allLearnings, setLearnings] = usePersistentState<Learning[]>('otel:learnings', [])
   const [offers] = usePersistentState<Offer[]>('otel:offers', seedOffers)
-  const [contacts] = usePersistentState<Contact[]>('otel:audience-contacts', seedContacts)
+  const [contacts] = useContacts()
   const [keyDates] = usePersistentState<KeyDate[]>('otel:key-dates', seedKeyDates)
   const [signals] = useSignals()
   const { forDepartment } = useResults()
@@ -112,13 +104,14 @@ export function BrainWorkspace({ onNavigate }: { onNavigate: (route: AppRoute) =
   const pendingAssets = visibleAssets.filter((asset) => asset.status === 'Pending approval').length
   const areasWithOffer = areas.filter((area) => offers.some((offer) => offer.departmentKey === area.key && offer.status === 'Active'))
   const upcomingEvents = keyDates.filter(
-    (date) => date.kind === 'Event' && date.date >= today && date.date <= addDays(today, 60) && (date.departmentKey === 'all' || canAccess(date.departmentKey)),
+    (date) => date.kind === 'Event' && (date.endDate ?? date.date) >= today && date.date <= addDays(today, 60) && (date.departmentKey === 'all' || canAccess(date.departmentKey)),
   )
   const freshness = areas.map((area) => ({ area, freshness: resolveFreshness(area, signals) }))
   const freshAreas = freshness.filter((item) => item.freshness.state === 'Confirmed')
   const firstStale = freshness.find((item) => item.freshness.state !== 'Confirmed')
-  const subscribed = contacts.filter((contact) => contact.permission === 'Subscribed').length
-  const unknown = contacts.filter((contact) => contact.permission === 'Unknown').length
+  const unknown = contacts.filter((contact) => contact.permission === 'Unknown' && !contact.suppressed).length
+  const allSegments = segmentStats(contacts).filter((segment) => segment.areas.some((area) => canAccess(area)))
+  const lowConsent = allSegments.filter((segment) => segment.rate < 0.5)
 
   const health = [
     {
@@ -160,7 +153,9 @@ export function BrainWorkspace({ onNavigate }: { onNavigate: (route: AppRoute) =
     {
       label: 'Marketing consent',
       done: unknown === 0,
-      detail: `${subscribed} of ${contacts.length} contacts consented${unknown ? ` · ${unknown} to confirm` : ''}`,
+      detail: unknown
+        ? `${unknown} contact${unknown === 1 ? '' : 's'} without recorded consent${lowConsent.length ? ` · ${lowConsent.length} segments under 50%` : ''}`
+        : `Every record has a consent basis${lowConsent.length ? ` · ${lowConsent.length} segments under 50%` : ''}`,
       action: { label: 'Open Audience', run: () => onNavigate('audience') },
     },
   ]
@@ -196,7 +191,9 @@ export function BrainWorkspace({ onNavigate }: { onNavigate: (route: AppRoute) =
       {
         id: crypto.randomUUID(),
         name: file.name,
-        kind: kindFromFile(file.name),
+        kind: kindFromFile(file.name, file.type),
+        size: file.size,
+        addedBy: user.name,
         departmentKey,
         status: isHotelManager ? 'Approved' : 'Pending approval',
         locked: false,
@@ -235,22 +232,13 @@ export function BrainWorkspace({ onNavigate }: { onNavigate: (route: AppRoute) =
     logActivity('Learning removed', learning.text, 'warning', areaName(learning.departmentKey))
   }
 
-  // ---------- Audiences (live from contacts) ----------
-  const segments = Object.values(
-    contacts.reduce<Record<string, { name: string; total: number; consented: number }>>((groups, contact) => {
-      const group = groups[contact.segment] ?? { name: contact.segment, total: 0, consented: 0 }
-      group.total += 1
-      if (contact.permission === 'Subscribed') group.consented += 1
-      groups[contact.segment] = group
-      return groups
-    }, {}),
-  ).sort((a, b) => b.total - a.total)
-
+  // ---------- Audiences (the shared segment catalogue) ----------
+  const segments = [...allSegments].sort((a, b) => b.total - a.total)
   const stats = [
     { icon: BedDouble, value: String(hotel.roomCount), label: 'Bedrooms' },
     { icon: Layers3, value: String(departments.length), label: 'Business areas' },
     { icon: Tag, value: String(offers.filter((offer) => offer.status === 'Active').length), label: 'Active offers' },
-    { icon: Users, value: String(contacts.length), label: 'Guest contacts' },
+    { icon: Users, value: String(allSegments.length), label: 'Guest segments' },
     { icon: Globe2, value: hotel.currency, label: hotel.timezone },
   ]
 
@@ -433,18 +421,20 @@ export function BrainWorkspace({ onNavigate }: { onNavigate: (route: AppRoute) =
             </div>
             <Users size={20} />
           </div>
-          <p className="muted small">From your contact records. Only consented contacts receive marketing.</p>
+          <p className="muted small">The segments every campaign draws from. Only consented, unsuppressed guests receive marketing.</p>
           <div className="brand-row-list">
-            {segments.map((segment) => (
+            {segments.slice(0, 6).map((segment) => (
               <div className="brand-asset-row" key={segment.name}>
                 <Users size={14} />
                 <span>{segment.name}</span>
-                <em>{segment.name === 'Suppression list' ? 'Always excluded' : `${segment.consented} of ${segment.total} consented`}</em>
+                <em className={segment.rate < 0.5 ? 'low-consent' : ''}>
+                  {formatCount(segment.consented)} of {formatCount(segment.total)} · {Math.round(segment.rate * 100)}%
+                </em>
               </div>
             ))}
           </div>
           <button type="button" className="ghost-link" onClick={() => onNavigate('audience')}>
-            Manage contacts <ArrowRight size={13} />
+            {segments.length > 6 ? `All ${segments.length} segments and consent` : 'Manage audiences and consent'} <ArrowRight size={13} />
           </button>
         </section>
 

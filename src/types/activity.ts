@@ -5,4 +5,6 @@ export type ActivityEvent = {
   tone: 'success' | 'warning' | 'info'
   at?: string
   area?: string
+  /** Who did it — recorded in the audit log. */
+  actor?: string
 }

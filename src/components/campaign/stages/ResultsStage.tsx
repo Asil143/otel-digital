@@ -1,11 +1,11 @@
 import { BookmarkPlus, Plus, Sparkles } from 'lucide-react'
 import { useState } from 'react'
-import { buildInsights, computeResults, formatCount, formatMoney, type Insight } from '../../../lib/results'
+import { buildInsights, computeResults, countUnit, formatCount, formatMoney, roundShares, type Insight } from '../../../lib/results'
 import { usePersistentState } from '../../../lib/usePersistentState'
-import { seedContacts } from '../../../data/contacts'
+import { useContacts } from '../../../lib/audience'
 import { seedOffers } from '../../../data/offers'
 import { generateNextRecommendation, type NextRecommendation } from '../../../services/aiMarketing'
-import type { Contact, Learning, Offer } from '../../../types/domain'
+import type { Learning, Offer } from '../../../types/domain'
 import { ResultsChart } from '../../operations/ResultsChart'
 import type { StageProps } from './shared'
 
@@ -18,7 +18,7 @@ const actionLabel: Record<NonNullable<Insight['action']>, string> = {
 
 export function ResultsStage({ campaign, department, onChange, onActivity, goToStage }: StageProps) {
   const [learnings, setLearnings] = usePersistentState<Learning[]>('otel:learnings', [])
-  const [contacts] = usePersistentState<Contact[]>('otel:audience-contacts', seedContacts)
+  const [contacts] = useContacts()
   const [offers] = usePersistentState<Offer[]>('otel:offers', seedOffers)
   const [next, setNext] = useState<(NextRecommendation & { live: boolean }) | null>(null)
   const [loading, setLoading] = useState(false)
@@ -117,17 +117,22 @@ export function ResultsStage({ campaign, department, onChange, onActivity, goToS
       {results.channels.length > 0 && (
         <div className="channel-breakdown">
           <h3>By channel</h3>
-          {results.channels.map((channel) => (
-            <div key={channel.channel} className="channel-breakdown-row">
-              <strong>{channel.channel}</strong>
-              <span>{formatCount(channel.reach)} {channel.reachLabel}</span>
-              <span>{formatCount(channel.clicks)} clicks</span>
-              <span className="channel-bar">
-                <i style={{ width: `${shown.bookings ? (channel.bookings / shown.bookings) * 100 : 0}%` }} />
-              </span>
-              <em>{formatCount(channel.bookings)} {unit}</em>
-            </div>
-          ))}
+          {(() => {
+            // Whole numbers that add up to the headline total, so the rows never disagree with it.
+            const whole = roundShares(results.channels.map((channel) => channel.bookings), Math.round(shown.bookings))
+            const wholeTotal = whole.reduce((sum, value) => sum + value, 0)
+            return results.channels.map((channel, index) => (
+              <div key={channel.channel} className="channel-breakdown-row">
+                <strong>{channel.channel}</strong>
+                <span>{formatCount(channel.reach)} {channel.reachLabel}</span>
+                <span>{formatCount(channel.clicks)} clicks</span>
+                <span className="channel-bar">
+                  <i style={{ width: `${wholeTotal ? (whole[index] / wholeTotal) * 100 : 0}%` }} />
+                </span>
+                <em>{countUnit(whole[index], unit)}</em>
+              </div>
+            ))
+          })()}
         </div>
       )}
       <p className="muted small">Demo model based on your audience, consent rate, channels and offer price. Live attribution needs a connected booking source.</p>

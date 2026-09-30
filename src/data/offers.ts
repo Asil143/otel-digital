@@ -15,9 +15,9 @@ export const seedOffers: Offer[] = [
 ]
 
 export const seedKeyDates: KeyDate[] = [
-  { id: 'date-halfterm', departmentKey: 'all', name: 'October half term', date: '2026-10-24', kind: 'Event' },
+  { id: 'date-halfterm', departmentKey: 'all', name: 'October half term', date: '2026-10-24', endDate: '2026-11-01', kind: 'Event' },
   { id: 'date-halloween', departmentKey: 'spa', name: 'Halloween', date: '2026-10-31', kind: 'Event' },
-  { id: 'date-rooms-quiet', departmentKey: 'rooms', name: 'Midweek quiet period', date: '2026-10-12', kind: 'Quiet period' },
+  { id: 'date-rooms-quiet', departmentKey: 'rooms', name: 'Midweek quiet period', date: '2026-10-12', endDate: '2026-10-15', kind: 'Quiet period' },
   { id: 'date-showcase', departmentKey: 'events', name: 'Wedding showcase', date: '2026-10-18', kind: 'Event' },
   { id: 'date-restaurant-quiet', departmentKey: 'restaurant', name: 'Tuesday dinner quiet period', date: '2026-10-13', kind: 'Quiet period' },
   { id: 'date-approval', departmentKey: 'all', name: 'Autumn campaign approval deadline', date: '2026-10-02', kind: 'Deadline' },

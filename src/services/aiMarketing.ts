@@ -12,6 +12,8 @@ export type StructuredSignal = {
   extractedFields: Record<string, string | number | boolean>
   confidence: 'High' | 'Medium' | 'Low'
   requiresConfirmation: boolean
+  /** False when the AI server couldn't be reached and this is the local fallback. */
+  live?: boolean
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
@@ -36,10 +38,10 @@ export async function structureBusinessSignal(input: UpdateMyAiInput): Promise<S
       body: JSON.stringify(input),
     })
     if (!response.ok) throw new Error(`AI server responded ${response.status}`)
-    return (await response.json()) as StructuredSignal
+    return { ...((await response.json()) as StructuredSignal), live: true }
   } catch (error) {
     console.warn('Falling back to local signal structuring:', error)
-    return fallbackSignal(input)
+    return { ...fallbackSignal(input), live: false }
   }
 }
 
