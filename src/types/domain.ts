@@ -181,6 +181,8 @@ export type DesignStyle = 'Classic' | 'Bold' | 'Minimal'
 export type DesignState = {
   style?: DesignStyle
   variant?: number
+  /** Chosen photo (URL) from the area's approved photography. */
+  image?: string
   headline?: string
   offerText?: string
   cta?: string

@@ -124,12 +124,12 @@ export function heroImage(url: string, width: number): { src: string; width: num
 const sans = "Helvetica, Arial, sans-serif"
 const serif = "Georgia, 'Times New Roman', serif"
 
-export function buildEmailHtml(campaign: CampaignRecord, department: Department, hotelAccount: HotelAccount): string {
+export function buildEmailHtml(campaign: CampaignRecord, department: Department, hotelAccount: HotelAccount, heroUrl: string = department.image): string {
   const style = emailStyles[department.key]
   const email = campaign.email
   const W = style.width
   const href = escapeHtml(withTracking(absoluteUrl(campaign.website.link, hotelAccount), campaign))
-  const hero = style.hero ? heroImage(department.image, W) : null
+  const hero = style.hero ? heroImage(heroUrl, W) : null
   const smallPrint = [campaign.offerTerms?.trim(), 'Subject to availability.'].filter(Boolean).join(' ')
   const paragraphs = email.body
     .split(/\n{2,}/)

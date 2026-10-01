@@ -1,6 +1,7 @@
 import { Check, Copy, Download, Lock, Send, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { activeHotel } from '../../../config/hotel'
+import { designImage } from '../../../lib/designFormats'
 import { buildEmailHtml, emailChecks, emailStyles } from '../../../lib/emailHtml'
 import { usePersistentState } from '../../../lib/usePersistentState'
 import { addDays, formatDate, formatDateTime, withApproval } from '../../../services/campaigns'
@@ -37,7 +38,8 @@ export function EmailStage({
 
   const email = campaign.email
   const style = emailStyles[department.key]
-  const html = buildEmailHtml(campaign, department, { ...activeHotel, ...hotel })
+  // The email hero is the photo chosen for the Email header design, so the two always match.
+  const html = buildEmailHtml(campaign, department, { ...activeHotel, ...hotel }, designImage(campaign, department.key, 'Email header'))
   const checks = emailChecks(campaign, html)
   const allChecksPass = checks.every((check) => check.status !== 'fail')
   const warnings = checks.filter((check) => check.status === 'warn').length
