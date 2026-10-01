@@ -9302,3 +9302,41 @@ button {
 .metric-card {
   min-width: 0;
 }
+
+/* ---------- Social formats: full-bleed photo, copy on a solid card ---------- */
+.design-canvas.format-social-square,
+.design-canvas.format-instagram-story {
+  display: block;
+  background: #1b1b1b;
+}
+
+.format-social-square .design-photo,
+.format-instagram-story .design-photo {
+  position: absolute;
+  inset: 0;
+}
+
+.format-social-square .design-panel,
+.format-instagram-story .design-panel {
+  position: absolute;
+  justify-content: flex-start;
+  border-radius: 1.2cqw;
+  box-shadow: 0 1.2cqw 3.6cqw rgba(0, 0, 0, 0.22);
+}
+
+.format-social-square .design-panel {
+  left: 6cqw;
+  right: 6cqw;
+  bottom: 6cqw;
+  gap: 1.5cqw;
+  padding: 5cqw 6cqw;
+}
+
+/* Story: the card sits above Instagram's reply bar (bottom ~13% of the screen). */
+.format-instagram-story .design-panel {
+  left: 7cqw;
+  right: 7cqw;
+  bottom: 26cqw;
+  gap: 2.4cqw;
+  padding: 7cqw 7cqw;
+}

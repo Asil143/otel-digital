@@ -232,7 +232,7 @@ export function DesignsStage({ campaign, department, currentRole, onChange, onAc
 
       <div className="design-toolbar">
         <p className="muted small stage-note">
-          {approvedCount} of {formats.length} design{formats.length === 1 ? '' : 's'} approved. Real sizes, the {department.name} palette, approved photography only, and copy kept off the photo.
+          {approvedCount} of {formats.length} design{formats.length === 1 ? '' : 's'} approved. Real sizes, the {department.name} palette, approved photography only, and copy on a solid panel — never directly on the photo.
         </p>
         {isManager && !locked && approvedCount < formats.length && (
           <button type="button" className="primary-button small" onClick={approveAll}>
@@ -367,7 +367,7 @@ export function DesignsStage({ campaign, department, currentRole, onChange, onAc
           })}
         </div>
         <p className="brand-rules">
-          <ShieldCheck size={14} /> Always applied: approved photography only · copy never over the photo · {department.name} palette · real output sizes.
+          <ShieldCheck size={14} /> Always applied: approved photography only · copy on a solid panel, never directly on the photo · {department.name} palette · real output sizes.
         </p>
       </section>
 

@@ -19,11 +19,13 @@ type Metrics = {
   offerLines: number
   cta: number
   ctaPad: [number, number]
+  /** Social formats: full-bleed photo with the copy on a solid card inset from the edges (cqw). */
+  card?: { inset: number; bottom: number }
 }
 
 const metrics: Record<DesignFormat, Metrics> = {
-  'Social square': { photo: 0.56, padTop: 4.5, padBottom: 4.5, padX: 7, gap: 1.6, brand: 2.3, headline: 6, headlineLines: 2, rule: [9, 0.45], offer: 3, offerLines: 2, cta: 2.4, ctaPad: [1.6, 3.4] },
-  'Instagram story': { photo: 0.5, padTop: 7, padBottom: 24, padX: 9, gap: 2.4, brand: 3.4, headline: 8.4, headlineLines: 3, rule: [9, 0.45], offer: 4.6, offerLines: 2, cta: 3.8, ctaPad: [2.4, 5] },
+  'Social square': { photo: 1, padTop: 5, padBottom: 5, padX: 6, gap: 1.5, brand: 2.3, headline: 6, headlineLines: 2, rule: [9, 0.45], offer: 3, offerLines: 2, cta: 2.4, ctaPad: [1.6, 3.4], card: { inset: 6, bottom: 6 } },
+  'Instagram story': { photo: 1, padTop: 7, padBottom: 7, padX: 7, gap: 2.4, brand: 3.4, headline: 8.4, headlineLines: 3, rule: [9, 0.45], offer: 4.6, offerLines: 2, cta: 3.8, ctaPad: [2.4, 5], card: { inset: 7, bottom: 26 } },
   'Email header': { photo: 0.56, padTop: 2.4, padBottom: 2.4, padX: 3.2, gap: 1, brand: 1.1, headline: 3, headlineLines: 3, rule: [4, 0.22], offer: 1.45, offerLines: 2, cta: 1.15, ctaPad: [0.8, 1.6] },
   'Website banner': { photo: 0.62, padTop: 2.4, padBottom: 2.4, padX: 3.2, gap: 1, brand: 1.1, headline: 2.5, headlineLines: 3, rule: [4, 0.22], offer: 1.25, offerLines: 2, cta: 1.15, ctaPad: [0.8, 1.6] },
 }
@@ -98,14 +100,19 @@ export async function renderDesignPng(input: DesignInput): Promise<Blob> {
   // Layout: photo and copy panel never overlap.
   const split = spec.layout === 'split'
   const flipped = split && input.variant % 2 === 1
-  const photoRect = split
-    ? { x: flipped ? W * (1 - m.photo) : 0, y: 0, w: W * m.photo, h: H }
-    : { x: 0, y: 0, w: W, h: H * m.photo }
-  const panel = split
-    ? { x: flipped ? 0 : W * m.photo, y: 0, w: W * (1 - m.photo), h: H }
-    : { x: 0, y: H * m.photo, w: W, h: H * (1 - m.photo) }
+  const photoRect = m.card
+    ? { x: 0, y: 0, w: W, h: H }
+    : split
+      ? { x: flipped ? W * (1 - m.photo) : 0, y: 0, w: W * m.photo, h: H }
+      : { x: 0, y: 0, w: W, h: H * m.photo }
+  // For card layouts the panel height is set once the copy is measured (below).
+  const panel = m.card
+    ? { x: m.card.inset * u, y: 0, w: W - 2 * m.card.inset * u, h: 0 }
+    : split
+      ? { x: flipped ? 0 : W * m.photo, y: 0, w: W * (1 - m.photo), h: H }
+      : { x: 0, y: H * m.photo, w: W, h: H * (1 - m.photo) }
 
-  ctx.fillStyle = colours.panel
+  ctx.fillStyle = m.card ? '#1b1b1b' : colours.panel
   ctx.fillRect(0, 0, W, H)
 
   // Photo, cropped like object-fit: cover with the chosen focus point.
@@ -204,6 +211,21 @@ export async function renderDesignPng(input: DesignInput): Promise<Blob> {
 
   const gap = m.gap * u
   const total = blocks.reduce((sum, block) => sum + block.height, 0) + gap * (blocks.length - 1)
+  if (m.card) {
+    // Solid card sized to its copy, anchored above the bottom edge (and Instagram's reply bar).
+    panel.h = total + (m.padTop + m.padBottom) * u
+    panel.y = H - m.card.bottom * u - panel.h
+    const radius = 1.2 * u
+    ctx.save()
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.22)'
+    ctx.shadowBlur = 3.6 * u
+    ctx.shadowOffsetY = 1.2 * u
+    ctx.fillStyle = colours.panel
+    ctx.beginPath()
+    ctx.roundRect(panel.x, panel.y, panel.w, panel.h, radius)
+    ctx.fill()
+    ctx.restore()
+  }
   const top = panel.y + m.padTop * u
   const available = panel.h - (m.padTop + m.padBottom) * u
   let y = top + Math.max(0, (available - total) / 2)
