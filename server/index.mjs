@@ -1,4 +1,5 @@
 import { createServer } from 'node:http'
+import { chatResponse, senderFrom } from './chatStore.mjs'
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8787
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
@@ -141,6 +142,12 @@ const server = createServer(async (req, res) => {
   }
 
   try {
+    if (req.url === '/api/chat' || req.url?.startsWith('/api/chat?')) {
+      const body = req.method === 'POST' ? await readBody(req) : undefined
+      const result = await chatResponse({ method: req.method, body, sender: senderFrom(req.headers, req.socket.remoteAddress) })
+      sendJson(res, result.status, result.body)
+      return
+    }
     if (req.method === 'POST' && req.url === '/api/ai/structure-signal') {
       await handleStructureSignal(req, res)
       return

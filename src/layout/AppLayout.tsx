@@ -1,5 +1,6 @@
 import { Hotel } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { FeedbackChat } from '../components/ui/FeedbackChat'
 import { UserSwitcher } from '../components/ui/UserSwitcher'
 import { type AppRoute, hiddenFromNav, routes } from '../config/routes'
 
@@ -53,6 +54,7 @@ export function AppLayout({
           <span className="demo-chip">Demo data · changes saved on this device</span>
         </footer>
       </div>
+      <FeedbackChat activeRoute={activeRoute} />
     </div>
   )
 }
