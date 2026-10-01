@@ -9340,3 +9340,44 @@ button {
   gap: 2.4cqw;
   padding: 7cqw 7cqw;
 }
+
+/* ---------- Top row fills its cards: square card wider, story card narrower, both grow with the board ---------- */
+.design-board {
+  container-type: inline-size;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+}
+
+/* Same stage height for both, sized from the board width so the square fills its card. */
+.design-card.format-social-square > .design-stage-area,
+.design-card.format-instagram-story > .design-stage-area {
+  height: clamp(260px, calc(60.8cqw - 34px), 600px);
+  padding: 16px;
+}
+
+@media (max-width: 820px) {
+  .design-board {
+    grid-template-columns: 1fr;
+  }
+
+  .design-card.format-social-square > .design-stage-area,
+  .design-card.format-instagram-story > .design-stage-area {
+    height: clamp(240px, calc(100cqw - 32px), 520px);
+  }
+}
+
+.design-card.format-social-square > .design-stage-area,
+.design-card.format-instagram-story > .design-stage-area {
+  height: clamp(260px, calc(60.8cqw - 34px), 700px);
+}
+
+@media (max-width: 820px) {
+  .design-card.format-instagram-story > .design-stage-area {
+    height: clamp(300px, calc(120cqw), 560px);
+  }
+}
+
+@media (max-width: 820px) {
+  .design-card.format-social-square > .design-stage-area {
+    height: clamp(240px, calc(100cqw - 32px), 520px);
+  }
+}
