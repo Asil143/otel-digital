@@ -99,7 +99,7 @@ export function WebsiteStage({
         <PreviewToggle mode={previewMode} onChange={setPreviewMode} />
         {website.format === 'SEO & meta' ? (
           <div className="serp-preview">
-            <span className="serp-url">{activeHotel.name.toLowerCase().replace(/\s+/g, '')}.com{website.link}</span>
+            <span className="serp-url">{(activeHotel.website ?? '').replace(/^https?:\/\//, '')}{website.link}</span>
             <strong>{website.metaTitle}</strong>
             <p>{website.metaDescription}</p>
           </div>

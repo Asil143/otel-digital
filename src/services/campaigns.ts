@@ -133,18 +133,28 @@ export function presetForOffer(department: Department, offers: Offer[], offer: O
   }
 }
 
+// Guest-facing copy only: department headlines are staff motivation lines and never reach guests.
 function guestMessage(department: Department, input: CampaignInput): string {
-  return `${department.headline} Discover ${input.offer} at ${activeHotel.name}, available ${formatDate(input.startDate)} to ${formatDate(input.endDate)}.`
+  return `${department.guestLine} ${input.offer} is available from ${formatDate(input.startDate)} to ${formatDate(input.endDate)}.`
+}
+
+const ctaByArea: Partial<Record<Department['key'], string>> = { events: 'Find out more', meetings: 'Enquire now' }
+
+/** Campaign names are often internal instructions ("Promote…", "Launch…"); guests see the offer instead. */
+export function guestTitle(input: Pick<CampaignInput, 'name' | 'offer'>): string {
+  const internal = /^(promote|launch|fill|drive|increase|grow|boost|push|sell)\b/i.test(input.name.trim())
+  return (internal ? input.offer : input.name).slice(0, 60)
 }
 
 function defaultEmail(department: Department, input: CampaignInput): EmailContent {
   return {
-    subject: `${input.name}: ${input.offer}`,
-    previewText: department.headline,
-    headline: input.name,
-    body: guestMessage(department, input),
-    offerDetails: `${input.offer}. ${input.offerTerms ? `${input.offerTerms} ` : ''}Available ${formatDate(input.startDate)} to ${formatDate(input.endDate)}, subject to availability.`,
-    ctaText: 'Book now',
+    // Subject and preview tease; the facts appear once; terms go in the small print; the landing page carries the rest.
+    subject: guestTitle(input),
+    previewText: department.guestLine,
+    headline: guestTitle(input),
+    body: `${input.offer}, available from ${formatDate(input.startDate)} to ${formatDate(input.endDate)}.`,
+    offerDetails: '',
+    ctaText: ctaByArea[department.key] ?? 'Book now',
     senderName: activeHotel.name,
     reminder: false,
     testSentAt: null,

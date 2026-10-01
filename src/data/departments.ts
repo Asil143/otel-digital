@@ -6,6 +6,7 @@ export const departments: Department[] = [
     name: 'Rooms',
     manager: 'James Carter',
     headline: 'More guests. Brighter stays.',
+    guestLine: 'Make the most of the quieter midweek nights by the sea.',
     subline: 'Rooms demand is softer midweek, with direct booking upside.',
     image:
       'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=1200&q=80',
@@ -39,6 +40,7 @@ export const departments: Department[] = [
     name: 'Spa & Wellness',
     manager: 'Sarah Mitchell',
     headline: 'Unwind. Rebalance. Feel better.',
+    guestLine: 'A midweek spa day, booked around you.',
     subline: 'Tuesday and Wednesday treatment demand is quieter than normal.',
     image:
       'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=1200&q=80',
@@ -72,6 +74,7 @@ export const departments: Department[] = [
     name: 'Restaurant / F&B',
     manager: 'Maya Wilson',
     headline: 'Great food brings people together.',
+    guestLine: 'A good reason to book a table this week.',
     subline: 'Tuesday dinner covers are below average, with strong local intent.',
     image:
       'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1200&q=80',
@@ -105,6 +108,7 @@ export const departments: Department[] = [
     name: 'Events & Weddings',
     manager: 'Priya Anand',
     headline: 'Your day, brighter details.',
+    guestLine: 'See what your wedding could look like here.',
     subline: 'Enquiry volume is steady but weekday wedding dates are underbooked for next spring.',
     image:
       'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1200&q=80',
@@ -138,6 +142,7 @@ export const departments: Department[] = [
     name: 'Hair & Beauty',
     manager: 'Lauren Ng',
     headline: 'Look good. Feel ready.',
+    guestLine: 'Your next appointment, with a little something extra.',
     subline: 'Booking volume is healthy; the open question is whether current pricing is leaving revenue on the table.',
     image:
       'https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?auto=format&fit=crop&w=1200&q=80',
@@ -171,6 +176,7 @@ export const departments: Department[] = [
     name: 'Golf',
     manager: 'Callum Reid',
     headline: 'More rounds. Brighter greens.',
+    guestLine: 'Get out on the course while the evenings allow.',
     subline: 'Tee time demand is fine overall, but the signal is too thin this week to justify a new push.',
     image:
       'https://images.unsplash.com/photo-1587174486073-ae5e5cff23aa?auto=format&fit=crop&w=1200&q=80',
@@ -204,6 +210,7 @@ export const departments: Department[] = [
     name: 'Meetings & Events',
     manager: 'Diane Foster',
     headline: 'Meetings that get results.',
+    guestLine: 'A simpler way to plan your next team day.',
     subline: 'Corporate day-delegate demand is soft midweek, but the fix may sit with the sales team, not marketing.',
     image:
       'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1200&q=80',
@@ -237,6 +244,7 @@ export const departments: Department[] = [
     name: 'Beach Club',
     manager: 'Noah Fischer',
     headline: 'Sun, sea, and easy days.',
+    guestLine: 'Make the last of the season count.',
     subline: 'Strong walk-up demand suggests the current offer may be under-distributed rather than under-marketed.',
     image:
       'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',

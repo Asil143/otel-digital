@@ -8220,3 +8220,99 @@ button {
   grid-column: 2;
   justify-self: start;
 }
+
+/* ---------- Email engine v2: real HTML preview ---------- */
+.email-template-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: #5d6559;
+}
+
+.email-template-line strong {
+  color: #1f2b26;
+}
+
+.email-inbox-line {
+  margin: 10px 0 8px;
+  padding: 8px 12px;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: #1f2b26;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  background: #ffffff;
+  border: 1px solid #e5e9e1;
+  border-radius: 6px;
+}
+
+.email-inbox-line span {
+  color: #839087;
+}
+
+.email-frame-wrap {
+  position: relative;
+  overflow: hidden;
+  background: #efece4;
+  border-radius: 8px;
+}
+
+.email-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  border: 0;
+  background: transparent;
+  transform-origin: top left;
+}
+
+.email-frame.mobile {
+  box-shadow: 0 6px 24px rgba(23, 60, 51, 0.18);
+}
+
+.email-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.email-export .muted {
+  flex: 1 1 220px;
+}
+
+.quality-checks h4 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.quality-checks h4 span {
+  font-size: 12px;
+  font-weight: 600;
+  color: #839087;
+}
+
+.quality-checks > span {
+  align-items: flex-start;
+}
+
+.quality-checks .check-text {
+  display: grid;
+  gap: 1px;
+}
+
+.quality-checks .check-text small {
+  font-size: 11.5px;
+  color: #6b6f63;
+}
+
+.quality-checks .warn {
+  color: #8a5a15;
+}

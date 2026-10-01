@@ -47,7 +47,10 @@ export type Department = {
   key: DepartmentKey
   name: string
   manager: string
+  /** Staff-facing motivation line for the dashboard. Never shown to guests. */
   headline: string
+  /** Guest-facing one-liner used for email preview text and openers. Specific, no clichés, no invented inclusions. */
+  guestLine: string
   subline: string
   image: string
   accent: string
@@ -76,6 +79,8 @@ export type HotelAccount = {
   brandPromise: string
   brandTone: string
   roomCount: number
+  /** Public website, used to turn relative booking links into absolute ones in emails. */
+  website?: string
 }
 
 export type CampaignAsset = {

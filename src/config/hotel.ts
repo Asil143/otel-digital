@@ -9,4 +9,5 @@ export const activeHotel: HotelAccount = {
   brandPromise: 'More guests. Brighter days.',
   brandTone: 'Warm, confident, never discount-led',
   roomCount: 86,
+  website: 'https://www.harbourviewhotel.example',
 }
