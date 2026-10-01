@@ -1,13 +1,26 @@
 import { BookMarked, Check, Eye, Globe2, Image, Lock, Mail, MessageSquareText, PenLine, RefreshCw, Sparkles, ThumbsDown, Unlock } from 'lucide-react'
 import { useState } from 'react'
+import { activeHotel } from '../../../config/hotel'
 import { usePersistentState } from '../../../lib/usePersistentState'
-import { designAssetNames, withApproval } from '../../../services/campaigns'
+import { designAssetNames, guestTitle, withApproval } from '../../../services/campaigns'
 import { canApprove } from '../../../services/permissions'
+import type { CampaignRecord, DesignState, DesignStyle } from '../../../types/domain'
 import { Modal } from '../../ui/Modal'
+import { formatSpecs, type DesignFormat } from '../../../lib/designFormats'
+import { DesignCanvas } from '../DesignCanvas'
 import type { StageProps } from './shared'
 
-const styleVariants = ['Classic', 'Bold', 'Minimal'] as const
+const styleVariants: DesignStyle[] = ['Classic', 'Bold', 'Minimal']
 const feedbackReasons = ['Too busy', 'Too generic', 'Too AI-looking', 'Wrong image', 'Not premium enough', 'Too much text'] as const
+// Feedback that means "pare it back" starts new designs in the Minimal style.
+const simplerReasons = new Set(['Too busy', 'Too much text', 'Too AI-looking', 'Not premium enough'])
+// Each format starts in a different style, matched to how it's used, so the set doesn't look repetitive.
+const formatDefaults: Record<string, { style: DesignStyle; variant: number }> = {
+  'Social square': { style: 'Bold', variant: 0 }, // stands out in a busy feed
+  'Instagram story': { style: 'Minimal', variant: 0 }, // full-screen, photo-led, little text
+  'Email header': { style: 'Classic', variant: 0 }, // matches the email template palette
+  'Website banner': { style: 'Bold', variant: 1 }, // copy panel on the left, unlike the email header
+}
 const assetIcons = { 'Social square': MessageSquareText, 'Instagram story': Image, 'Email header': Mail, 'Website banner': Globe2 }
 const templateLibrary = [
   { id: 'signature', name: 'Signature hero', area: 'All areas' },
@@ -16,35 +29,47 @@ const templateLibrary = [
 ]
 
 type AssetName = (typeof designAssetNames)[number]
-type AssetCopy = { headline: string; cta: string; offerText: string }
+type Copy = { headline: string; offerText: string; cta: string }
 
 export function DesignsStage({ campaign, department, currentRole, onChange, onActivity }: StageProps) {
   const [previewAsset, setPreviewAsset] = useState<AssetName | null>(null)
-  const [editingAsset, setEditingAsset] = useState<AssetName | null>(null)
+  const [editing, setEditing] = useState<{ asset: AssetName; copy: Copy } | null>(null)
   const [feedbackAsset, setFeedbackAsset] = useState<AssetName | null>(null)
-  const [assetStyle, setAssetStyle] = useState<Partial<Record<AssetName, (typeof styleVariants)[number]>>>({})
-  const [assetCopy, setAssetCopy] = useState<Partial<Record<AssetName, AssetCopy>>>({})
   const [feedbackCounts, setFeedbackCounts] = usePersistentState<Record<string, number>>(`otel:${department.key}:design-feedback`, {})
   const [lockedTemplates, setLockedTemplates] = usePersistentState<string[]>(`otel:${department.key}:locked-templates`, ['signature'])
 
   const learnedPreference = Object.entries(feedbackCounts).find(([, count]) => count >= 2)?.[0]
+  const prefersSimpler = Boolean(learnedPreference && simplerReasons.has(learnedPreference))
+  const defaultStyleFor = (asset: AssetName): DesignStyle => {
+    const style = formatDefaults[asset]?.style ?? 'Classic'
+    return prefersSimpler && style === 'Bold' ? 'Minimal' : style
+  }
   const isApproved = (asset: AssetName) => campaign.approvedDesigns.includes(asset)
 
-  function copyFor(asset: AssetName): AssetCopy {
-    return assetCopy[asset] ?? { headline: department.headline, cta: 'Book now', offerText: campaign.offer }
+  function stateFor(asset: AssetName): Required<Pick<DesignState, 'style' | 'variant'>> & Copy {
+    const saved = campaign.designs?.[asset] ?? {}
+    return {
+      style: saved.style ?? defaultStyleFor(asset),
+      variant: saved.variant ?? formatDefaults[asset]?.variant ?? 0,
+      headline: saved.headline ?? guestTitle(campaign),
+      offerText: saved.offerText ?? campaign.offer,
+      cta: saved.cta ?? (campaign.email.ctaText || 'Book now'),
+    }
   }
 
   function setAssetApproval(asset: AssetName, approved: boolean) {
-    const approvedDesigns = approved
-      ? Array.from(new Set([...campaign.approvedDesigns, asset]))
-      : campaign.approvedDesigns.filter((item) => item !== asset)
+    const approvedDesigns = approved ? Array.from(new Set([...campaign.approvedDesigns, asset])) : campaign.approvedDesigns.filter((item) => item !== asset)
     const allApproved = designAssetNames.every((name) => approvedDesigns.includes(name))
     onChange(withApproval({ ...campaign, approvedDesigns }, 'Designs', allApproved))
   }
 
-  function markChanged(asset: AssetName, title: string, detail: string) {
-    if (isApproved(asset)) setAssetApproval(asset, false)
-    onActivity(title, `${detail}${isApproved(asset) ? ' It needs approval again.' : ''}`, 'info')
+  /** Saves a change to one design; a changed design needs approval again. */
+  function updateDesign(asset: AssetName, patch: DesignState, title: string, detail: string) {
+    const wasApproved = isApproved(asset)
+    let next: CampaignRecord = { ...campaign, designs: { ...campaign.designs, [asset]: { ...campaign.designs?.[asset], ...patch } } }
+    if (wasApproved) next = withApproval({ ...next, approvedDesigns: next.approvedDesigns.filter((item) => item !== asset) }, 'Designs', false)
+    onChange(next)
+    onActivity(title, `${detail}${wasApproved ? ' It needs approval again.' : ''}`, 'info')
   }
 
   function recordFeedback(asset: AssetName, reason: string) {
@@ -53,62 +78,98 @@ export function DesignsStage({ campaign, department, currentRole, onChange, onAc
     setFeedbackAsset(null)
   }
 
+  function canvas(asset: AssetName) {
+    const state = stateFor(asset)
+    return (
+      <DesignCanvas
+        format={asset as DesignFormat}
+        area={department.key}
+        image={department.image}
+        brand={activeHotel.name}
+        headline={state.headline}
+        offerText={state.offerText}
+        cta={state.cta}
+        style={state.style}
+        variant={state.variant}
+      />
+    )
+  }
+
   return (
     <>
       {learnedPreference && (
         <div className="learning-banner">
           <Sparkles size={16} />
-          Learned preference for {department.name}: avoid "{learnedPreference}" in future proposals.
+          Learned preference for {department.name}: avoid "{learnedPreference}" in future proposals
+          {simplerReasons.has(learnedPreference) ? ' — bold designs now start in the calmer Minimal style.' : '.'}
         </div>
       )}
       <p className="muted small stage-note">
-        {campaign.approvedDesigns.length} of {designAssetNames.length} designs approved. Designs use approved hotel templates — editing is limited to copy, CTA and template.
+        {campaign.approvedDesigns.length} of {designAssetNames.length} designs approved. Each format uses its real size and the {department.name} palette; photography and copy stay
+        separate. Editing is limited to copy, call to action and style.
       </p>
-      <div className="asset-grid">
+      <div className="design-board">
         {designAssetNames.map((asset) => {
           const Icon = assetIcons[asset]
+          const state = stateFor(asset)
+          const spec = formatSpecs[asset as DesignFormat]
           return (
-            <article className="asset-card" key={asset}>
-              <div className="asset-visual" style={{ backgroundImage: `url(${department.image})` }}>
-                <span>{copyFor(asset).offerText}</span>
-              </div>
-              <div>
-                <Icon size={17} />
-                <strong>{asset}</strong>
-                <em>{isApproved(asset) ? 'Approved' : 'Draft'}</em>
-                <em className="style-tag">{assetStyle[asset] ?? styleVariants[0]}</em>
+            <article className={`asset-card design-card format-${asset.toLowerCase().replace(/\s+/g, '-')}`} key={asset}>
+              <div className="design-stage-area">{canvas(asset)}</div>
+              <div className="design-card-head">
+                <Icon size={16} />
+                <span>
+                  <strong>{asset}</strong>
+                  <small>
+                    {spec.size} · {spec.use}
+                  </small>
+                </span>
+                <em className={isApproved(asset) ? 'design-status approved' : 'design-status'}>{isApproved(asset) ? 'Approved' : 'Draft'}</em>
+                <em className="style-tag">{state.style}</em>
               </div>
               <div className="asset-actions">
-                <button type="button" onClick={() => setPreviewAsset(asset)}><Eye size={15} /> Preview</button>
-                <button type="button" onClick={() => markChanged(asset, 'Asset regenerated', `${asset} regenerated from the same brief.`)}>
-                  <RefreshCw size={15} /> Regenerate
-                </button>
-                <button type="button" onClick={() => setEditingAsset(asset)}><PenLine size={15} /> Edit</button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = styleVariants[(styleVariants.indexOf(assetStyle[asset] ?? styleVariants[0]) + 1) % styleVariants.length]
-                    setAssetStyle((current) => ({ ...current, [asset]: next }))
-                    markChanged(asset, 'Style changed', `${asset} switched to the ${next} template.`)
-                  }}
-                >
-                  <BookMarked size={15} /> Use different style
-                </button>
-                <button type="button" onClick={() => setFeedbackAsset(asset)}><ThumbsDown size={15} /> Give feedback</button>
-                {canApprove(currentRole) ? (
+                <span className="design-primary">
+                  <button type="button" onClick={() => setPreviewAsset(asset)}>
+                    <Eye size={14} /> Preview
+                  </button>
+                  <button type="button" onClick={() => setEditing({ asset, copy: { headline: state.headline, offerText: state.offerText, cta: state.cta } })}>
+                    <PenLine size={14} /> Edit
+                  </button>
+                  {canApprove(currentRole) ? (
+                    <button
+                      type="button"
+                      className="design-approve"
+                      disabled={isApproved(asset)}
+                      onClick={() => {
+                        setAssetApproval(asset, true)
+                        onActivity('Asset approved', `${asset} approved for publishing.`, 'success')
+                      }}
+                    >
+                      <Check size={14} /> {isApproved(asset) ? 'Approved' : 'Approve'}
+                    </button>
+                  ) : (
+                    <button type="button" disabled title="Approval by hotel manager">
+                      <Lock size={13} /> Manager approves
+                    </button>
+                  )}
+                </span>
+                <span className="design-secondary">
                   <button
                     type="button"
-                    disabled={isApproved(asset)}
                     onClick={() => {
-                      setAssetApproval(asset, true)
-                      onActivity('Asset approved', `${asset} approved for publishing.`, 'success')
+                      const next = styleVariants[(styleVariants.indexOf(state.style) + 1) % styleVariants.length]
+                      updateDesign(asset, { style: next }, 'Style changed', `${asset} switched to the ${next} style.`)
                     }}
                   >
-                    <Check size={15} /> {isApproved(asset) ? 'Approved' : 'Approve'}
+                    <BookMarked size={13} /> Use different style
                   </button>
-                ) : (
-                  <button type="button" disabled title="Approval by hotel manager"><Lock size={14} /> Manager approves</button>
-                )}
+                  <button type="button" onClick={() => updateDesign(asset, { variant: state.variant + 1 }, 'Asset regenerated', `${asset} regenerated from the same brief with a new crop and layout.`)}>
+                    <RefreshCw size={13} /> Regenerate
+                  </button>
+                  <button type="button" onClick={() => setFeedbackAsset(asset)}>
+                    <ThumbsDown size={13} /> Give feedback
+                  </button>
+                </span>
               </div>
             </article>
           )
@@ -150,37 +211,38 @@ export function DesignsStage({ campaign, department, currentRole, onChange, onAc
       </div>
 
       {previewAsset && (
-        <Modal title={`${previewAsset} preview`} onClose={() => setPreviewAsset(null)}>
+        <Modal title={`${previewAsset} preview`} onClose={() => setPreviewAsset(null)} wide>
           <div className="asset-preview-modal">
-            <div className="asset-visual large" style={{ backgroundImage: `url(${department.image})` }}>
-              <span>{copyFor(previewAsset).offerText}</span>
-            </div>
+            <div className={`design-preview-frame format-${previewAsset.toLowerCase().replace(/\s+/g, '-')}`}>{canvas(previewAsset)}</div>
             <div className="modal-list">
               <article>
+                <strong>Format</strong>
+                <span>
+                  {formatSpecs[previewAsset as DesignFormat].size} px · {formatSpecs[previewAsset as DesignFormat].use}
+                </span>
+              </article>
+              <article>
                 <strong>Status</strong>
-                <span>{isApproved(previewAsset) ? 'Approved' : 'Draft'}</span>
+                <span>
+                  {isApproved(previewAsset) ? 'Approved' : 'Draft'} · {stateFor(previewAsset).style} style
+                </span>
               </article>
               <article>
                 <strong>Template rule</strong>
-                <span>Uses the locked hotel template and approved imagery. Only copy, CTA and template can change.</span>
+                <span>Approved {department.name} imagery and palette. Copy sits on its own panel, never over the photo. Only copy, call to action and style can change.</span>
               </article>
             </div>
           </div>
         </Modal>
       )}
 
-      {editingAsset && (
-        <Modal title={`Edit ${editingAsset}`} onClose={() => setEditingAsset(null)}>
+      {editing && (
+        <Modal title={`Edit ${editing.asset}`} onClose={() => setEditing(null)}>
           <div className="modal-list edit-form">
             {(['headline', 'offerText', 'cta'] as const).map((field) => (
               <label key={field}>
                 <span>{field === 'offerText' ? 'Offer text' : field === 'cta' ? 'Call to action' : 'Headline'}</span>
-                <input
-                  value={copyFor(editingAsset)[field]}
-                  onChange={(event) =>
-                    setAssetCopy((current) => ({ ...current, [editingAsset]: { ...copyFor(editingAsset), [field]: event.target.value } }))
-                  }
-                />
+                <input value={editing.copy[field]} onChange={(event) => setEditing({ ...editing, copy: { ...editing.copy, [field]: event.target.value } })} />
               </label>
             ))}
           </div>
@@ -188,8 +250,8 @@ export function DesignsStage({ campaign, department, currentRole, onChange, onAc
             type="button"
             className="primary-button"
             onClick={() => {
-              markChanged(editingAsset, 'Asset edited', `${editingAsset} copy updated.`)
-              setEditingAsset(null)
+              updateDesign(editing.asset, editing.copy, 'Asset edited', `${editing.asset} copy updated.`)
+              setEditing(null)
             }}
           >
             Save edits

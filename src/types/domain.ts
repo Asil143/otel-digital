@@ -176,6 +176,16 @@ export type SendMode = 'approval' | 'schedule' | 'publish'
 
 export type CampaignTimelineStep = 'Content created' | 'Sent for approval' | 'Approved' | 'Scheduled' | 'Live' | 'Completed'
 
+export type DesignStyle = 'Classic' | 'Bold' | 'Minimal'
+
+export type DesignState = {
+  style?: DesignStyle
+  variant?: number
+  headline?: string
+  offerText?: string
+  cta?: string
+}
+
 export type CampaignRecord = {
   id: string
   departmentKey: DepartmentKey
@@ -193,6 +203,8 @@ export type CampaignRecord = {
   status: CampaignStatus
   approvals: Record<ApprovalChannel, boolean>
   approvedDesigns: string[]
+  /** Per-format design choices (style, variation, copy overrides), saved with the campaign. */
+  designs?: Partial<Record<string, DesignState>>
   email: EmailContent
   website: WebsiteContent
   socialPosts: SocialPost[]
