@@ -1,9 +1,6 @@
 import type { CSSProperties } from 'react'
-import { formatSpecs, type DesignFormat } from '../../lib/designFormats'
-import { emailStyles } from '../../lib/emailHtml'
+import { crops, designColours, formatSpecs, type DesignFormat } from '../../lib/designFormats'
 import type { DepartmentKey, DesignStyle } from '../../types/domain'
-
-const crops = ['50% 50%', '50% 28%', '50% 72%', '28% 50%', '72% 50%']
 
 /**
  * One on-brand composition per format. Photography and copy are kept apart (no text over the
@@ -20,6 +17,7 @@ export function DesignCanvas({
   cta,
   style,
   variant,
+  safeZones = false,
 }: {
   format: DesignFormat
   area: DepartmentKey
@@ -30,15 +28,11 @@ export function DesignCanvas({
   cta: string
   style: DesignStyle
   variant: number
+  /** Show where Instagram's own interface covers a story (preview only). */
+  safeZones?: boolean
 }) {
   const spec = formatSpecs[format]
-  const palette = emailStyles[area]
-  const colours =
-    style === 'Bold'
-      ? { panel: palette.button, heading: '#FFFFFF', text: 'rgba(255,255,255,0.86)', accent: palette.accent, ctaBg: palette.accent, ctaText: '#1B1B1B' }
-      : style === 'Minimal'
-        ? { panel: '#FFFFFF', heading: '#1C1C1C', text: '#4A4A46', accent: palette.accent, ctaBg: 'transparent', ctaText: '#1C1C1C' }
-        : { panel: palette.page, heading: palette.heading, text: palette.text, accent: palette.accent, ctaBg: palette.button, ctaText: palette.buttonText }
+  const colours = designColours(area, style)
   const flipped = spec.layout === 'split' && variant % 2 === 1
 
   return (
@@ -58,6 +52,12 @@ export function DesignCanvas({
         {offerText && offerText.trim().toLowerCase() !== headline.trim().toLowerCase() && <span className="design-offer">{offerText}</span>}
         <span className="design-cta">{cta}</span>
       </div>
+      {safeZones && format === 'Instagram story' && (
+        <>
+          <span className="safe-zone top">Instagram profile bar</span>
+          <span className="safe-zone bottom">Reply bar</span>
+        </>
+      )}
     </div>
   )
 }
